@@ -9,4 +9,4 @@ Once the app is running, open your local host
 
 For more information about FireCan see the about section
 
-When running locally, to disable request size limit, change the MAX_SIZE_MB variabel on the very first line of firecan_main.py
+When running locally, to disable request size limit, change the MAX_SIZE_MB variable on the very first line of firecan_main.py
