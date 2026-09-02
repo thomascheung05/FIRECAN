@@ -76,14 +76,15 @@ def fx_get_url_request(dataname, url, zipname, gpkgname):
     #################### ######################################## ######################################## ######################################## ####################
     # Checks if a dataset exists, if not it downloads it using a URL and unpacks the zip 
     #################### ######################################## ######################################## ######################################## ####################    
-    
-    print(f'.. {timenow()} Requestinog URL')    
+      
     savefolder = work_dir / "data" / dataname
     zip_path = savefolder / zipname                                                                # Name of zip file depends on the data being dowloaded, for fire data its the same but not for watershed data
     unzipped_file_path = savefolder / gpkgname                                                     # This differs between quebec fire data, and also watershed data set
 
     if not unzipped_file_path.exists():                                                              # Checks if the GPKG file exists, if not it will create a folder and downlaod it 
-        print(f'.... {timenow()} The data does not exist for {dataname} Downloading now')         
+        print(f'.... {timenow()} The data does not exist for {dataname} Downloading now')   
+        if url == 'https://diffusion.mffp.gouv.qc.ca/Diffusion/DonneeGratuite/Foret/PERTURBATIONS_NATURELLES/Feux_foret/02-Donnees/PROV/FEUX_PROV_GPKG.zip':
+            print(f'.... This may take up to 15 mintues')
         savefolder.mkdir(parents=True, exist_ok=True)
         response = requests.get(url)                                                               
         with open(zip_path, 'wb') as f:
@@ -147,7 +148,7 @@ def fx_get_can_fire_data():
 
         gdf.to_parquet(can_processed_data_path)
     else:               
-        print(f'........ {timenow()} The CAN data is already processed Loading in now')                                                                                                # If there fire data is already processed we just load it in here
+        print(f'........ {timenow()} The CAN data is already processed loading in now')                                                                                                # If there fire data is already processed we just load it in here
         gdf = gpd.read_parquet(can_processed_data_path)
 
     return gdf
