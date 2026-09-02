@@ -6,6 +6,8 @@ from flask import Flask, request # type: ignore
 import json
 import sys
 import geopandas as gpd
+import webbrowser
+import threading
 
 create_data_folder()
 
@@ -120,8 +122,12 @@ def fx_main():                                                                  
 def serve_html():
     return app.send_static_file('firecan_web.html')
 
+def open_browser():
+    webbrowser.open_new("http://127.0.0.1:5000")
+
 if __name__ == '__main__':
-    app.run(debug=False)
+    threading.Timer(1, open_browser).start()  # small delay so server is up first
+    app.run(port=5000)
 
 
 

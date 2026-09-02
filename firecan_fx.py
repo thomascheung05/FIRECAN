@@ -35,11 +35,11 @@ def repojectdata(data, targetcrs):
     is_targercrs = data.crs.to_epsg() == targetcrs
 
     if is_targercrs:
-        print(f'............The data is already in {targetcrs}')
+        print(f'............ The data is already in {targetcrs}')
         return data
     else:
         data = data.to_crs(targetcrs)    
-        print('The data has been reprojectd')    
+        print('............ The data has been reprojectd')    
         return data
 
 
@@ -82,9 +82,7 @@ def fx_get_url_request(dataname, url, zipname, gpkgname):
     unzipped_file_path = savefolder / gpkgname                                                     # This differs between quebec fire data, and also watershed data set
 
     if not unzipped_file_path.exists():                                                              # Checks if the GPKG file exists, if not it will create a folder and downlaod it 
-        print(f'.... {timenow()} The data does not exist for {dataname} Downloading now')   
-        if url == 'https://diffusion.mffp.gouv.qc.ca/Diffusion/DonneeGratuite/Foret/PERTURBATIONS_NATURELLES/Feux_foret/02-Donnees/PROV/FEUX_PROV_GPKG.zip':
-            print(f'.... This may take up to 15 mintues')
+        print(f'.... {timenow()} The data does not exist for {dataname} Downloading now (this may take up to 15 mintues)')   
         savefolder.mkdir(parents=True, exist_ok=True)
         response = requests.get(url)                                                               
         with open(zip_path, 'wb') as f:

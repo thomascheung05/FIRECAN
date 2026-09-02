@@ -32,25 +32,16 @@ The backend is built with Python using Flask and GeoPandas for data processing, 
     cd firecan
     ```
 
-2.  **Install the required Python packages:**
+2.  **Run Firecan.sh**
     ```sh
-    pip install -r requirements.txt
+    ./FIRECAN.sh
     ```
+
 
 ### First-Time Setup
 
-The first time you run the application, it will automatically download the necessary fire and watershed data (approximately 2 GB). This process can take around 10 minutes, with the majority of the time spent on the download. Once processed, the data is saved locally for faster startup on subsequent runs.
+The first time you run the application, it will automatically create a VENV, install the requirements and download the necessary fire and watershed data (approximately 2 GB). This process can take up to 15 minutes, with the majority of the time spent on the download. Once processed, the data is saved locally for faster startup on subsequent runs.
 
-## Usage
-
-1.  **Run the application:**
-    ```sh
-    python firecan_main.py
-    ```
-    After the initial data setup, the console will display a message indicating the app is ready to serve requests.
-
-2.  **Access the web application:**
-    Open your web browser and navigate to `http://127.0.0.1:5000`.
 
 3.  **Using the Interface:**
     *   Use the sidebar to set your desired filters.
