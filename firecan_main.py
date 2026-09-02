@@ -1,4 +1,4 @@
-MAX_SIZE_MB = 10
+MAX_SIZE_MB = 100
 
 
 from firecan_fx import fx_get_can_fire_data,convert_m_4326deg,fx_merge_provincial_fires,timenow,create_data_folder,fx_get_qc_fire_data,fx_filter_fires_data,fx_download_json,fx_download_csv,timenow, fx_download_gpkg, fx_get_qc_watershed_data
