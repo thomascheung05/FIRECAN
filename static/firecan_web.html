@@ -28,7 +28,7 @@
 
             <div id="mapSection" class="col-12 col-md-1 p-3" style="display:none;">
 
-                <button id="mapBackButton" class="btn btn-secondary mb-3">←</button>
+                <button id="mapBackButton" class="btn btn-secondary mb-3"></button>
                 
                 <div id = "gofiler">
                     <div class="d-flex gap-2">
@@ -186,7 +186,7 @@
             </div>
 
             <div id="aboutSection" class="col-12 col-md-1 p-3" style="display:none;">
-                <button id="aboutBackButton" class="btn btn-secondary mb-3">←</button>
+                <button id="aboutBackButton" class="btn btn-secondary mb-3"></button>
                 <h1>About FIRECAN</h1>
 
                 <p><strong>Firecan</strong> is a collection of historical forest fires data in Canada<br>
@@ -438,7 +438,7 @@
     <script>
         const watershedButton = document.getElementById("watershedExplorerButton");
         const modal = document.getElementById("watershedModal");
-        const closeBtn = document.querySelector(".close");
+        const closeBtn = modal.querySelector(".close");
 
         let watershedMap = null;
         let watershedLayer = null;

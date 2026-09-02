@@ -279,6 +279,7 @@ button:hover, .checkbox-group label:hover {
     background-color: rgba(0,0,0,0.7);
 }
 
+
 #watershedMap {
     position: absolute;
     top: 10%;
