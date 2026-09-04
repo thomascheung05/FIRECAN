@@ -70,7 +70,25 @@ def convert_m_4326deg(meters, lat):
 
 
 
+def fx_download_raw_data(dataname, url, zipname):        
+    #################### ######################################## ######################################## ######################################## ####################
+    # downloads raw data using a URL and unpacks the zip 
+    #################### ######################################## ######################################## ######################################## ####################    
+      
+    savefolder = work_dir / "data" / dataname
+    zip_path = savefolder / zipname                                                                # Name of zip file depends on the data being dowloaded, for fire data its the same but not for watershed data
+                                                        
+    print(f'.... {timenow()} Downloading data for {dataname} (this may take up to 15 mintues)')   
+    savefolder.mkdir(parents=True, exist_ok=True)
+    response = requests.get(url)                                                               
+    with open(zip_path, 'wb') as f:
+        f.write(response.content)
+    with zipfile.ZipFile(zip_path, 'r') as zip_ref:                                            # The data come in a zipfile so must unzip it
+        zip_ref.extractall(savefolder)
+    print(f'...... {timenow()} The data for {dataname} has been dowloaded')
 
+
+    
 
 def fx_get_url_request(dataname, url, zipname, gpkgname):        
     #################### ######################################## ######################################## ######################################## ####################
