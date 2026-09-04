@@ -1,7 +1,7 @@
 MAX_SIZE_MB = 100
 
 
-from firecan_fx import fx_download_raw_data, fx_get_can_fire_data,convert_m_4326deg,fx_merge_provincial_fires,timenow,create_data_folder,fx_get_qc_fire_data,fx_filter_fires_data,fx_download_json,fx_download_csv,timenow, fx_download_gpkg, fx_get_qc_watershed_data
+from firecan_fx import fx_process_qcfire_data,create_processeddata_folder,fx_process_canfire_data, fx_download_raw_data, fx_get_can_fire_data,convert_m_4326deg,fx_merge_provincial_fires,timenow,create_data_folder,fx_get_qc_fire_data,fx_filter_fires_data,fx_download_json,fx_download_csv,timenow, fx_download_gpkg, fx_get_qc_watershed_data
 from flask import Flask, request # type: ignore
 import json
 import sys
@@ -11,29 +11,46 @@ import threading
 from pathlib import Path
 
 work_dir  = Path.cwd()
-CAN_PROCESSED_DATA_FOLDER_PATH = work_dir / "data" / "processed_data"
-CAN_PROCESSED_DATA_PATH = CAN_PROCESSED_DATA_FOLDER_PATH / "can_processed_fire_data.parquet"  # processed data output
-CAN_RAW_DATA_PATH = work_dir / "data" / "canfire"
+PROCESSED_DATA_FOLDER_PATH = work_dir / "data" / "processed_data"
+CAN_PROCESSED_DATA_PATH = PROCESSED_DATA_FOLDER_PATH / "can_processed_fire_data.parquet"  # processed data output
+CAN_RAW_DATA_FOLDER_PATH = work_dir / "data" / "canfire"
+CAN_RAW_DATA_PATH = work_dir / "data" / "canfire" / "NFDB_poly_1972to2020_20250630.shp"
+QC_PROCESSED_DATA_PATH = PROCESSED_DATA_FOLDER_PATH / 'qc_processed_fire_data.parquet'
+QC_BEFORE_RAW_DATA_PATH = work_dir / "data" / 'qcfires_before76' / 'FEUX_PROV.gpkg'
+QC_AFTER_RAW_DATA_PATH = work_dir / "data" / 'qcfires_after76' / 'FEUX_PROV.gpkg'
 
 
 
-create_data_folder()
+
+
 
 print('------------------------Starting data pre-loading. This may take a few minutes...', timenow(),'------------------------')                                      # This section here loads in the data, it uses the scrap donne quebec function and the process qc fire data fuction
+
+create_data_folder()
+create_processeddata_folder
+
+
 if not CAN_PROCESSED_DATA_PATH.exists():
     fx_download_raw_data(
     'canfire',
     'https://cwfis.cfs.nrcan.gc.ca/downloads/nfdb/fire_poly/current_version/NFDB_poly.zip',
     'NFDB_poly.zip',
     )    
+    gdf_can_fires = fx_process_canfire_data(CAN_RAW_DATA_FOLDER_PATH)
 
- 
+if not CAN_PROCESSED_DATA_PATH.exists():
+    fx_download_raw_data('qcfires_after76',
+                     'https://diffusion.mffp.gouv.qc.ca/Diffusion/DonneeGratuite/Foret/PERTURBATIONS_NATURELLES/Feux_foret/02-Donnees/PROV/FEUX_PROV_GPKG.zip',
+                     'FEUX_PROV_GPKG.zip')
+    fx_download_raw_data('qcfires_before76',
+                     'https://diffusion.mffp.gouv.qc.ca/Diffusion/DonneeGratuite/Foret/PERTURBATIONS_NATURELLES/Feux_foret/02-Donnees/PROV/FEUX_ANCIENS_PROV_GPKG.zip'
+                     'FEUX_PROV_GPKG.zip')
+    gdf_qc_fires = fx_process_qcfire_data()
 
 
 
 
-gdf_can_fires = fx_get_can_fire_data()
-gdf_qc_fires = fx_get_qc_fire_data()
+
 gdf_qc_watershed_data = fx_get_qc_watershed_data()
 gdf_fires = fx_merge_provincial_fires(gdf_qc_fires, gdf_can_fires)
 
