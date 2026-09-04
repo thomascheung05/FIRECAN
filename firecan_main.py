@@ -1,7 +1,7 @@
 MAX_SIZE_MB = 100
 
 
-from firecan_fx import fx_process_qcfire_data,create_processeddata_folder,fx_process_canfire_data, fx_download_raw_data, fx_get_can_fire_data,convert_m_4326deg,fx_merge_provincial_fires,timenow,create_data_folder,fx_get_qc_fire_data,fx_filter_fires_data,fx_download_json,fx_download_csv,timenow, fx_download_gpkg, fx_get_qc_watershed_data
+from firecan_fx import fx_process_watershed_data,fx_process_qcfire_data,create_processeddata_folder,fx_process_canfire_data, fx_download_raw_data, fx_get_can_fire_data,convert_m_4326deg,fx_merge_provincial_fires,timenow,create_data_folder,fx_get_qc_fire_data,fx_filter_fires_data,fx_download_json,fx_download_csv,timenow, fx_download_gpkg, fx_get_qc_watershed_data
 from flask import Flask, request # type: ignore
 import json
 import sys
@@ -11,6 +11,7 @@ import threading
 from pathlib import Path
 
 work_dir  = Path.cwd()
+DATA_FOLDER_PATH = work_dir / 'data'
 PROCESSED_DATA_FOLDER_PATH = work_dir / "data" / "processed_data"
 CAN_PROCESSED_DATA_PATH = PROCESSED_DATA_FOLDER_PATH / "can_processed_fire_data.parquet"  # processed data output
 CAN_RAW_DATA_FOLDER_PATH = work_dir / "data" / "canfire"
@@ -18,6 +19,9 @@ CAN_RAW_DATA_PATH = work_dir / "data" / "canfire" / "NFDB_poly_1972to2020_202506
 QC_PROCESSED_DATA_PATH = PROCESSED_DATA_FOLDER_PATH / 'qc_processed_fire_data.parquet'
 QC_BEFORE_RAW_DATA_PATH = work_dir / "data" / 'qcfires_before76' / 'FEUX_PROV.gpkg'
 QC_AFTER_RAW_DATA_PATH = work_dir / "data" / 'qcfires_after76' / 'FEUX_PROV.gpkg'
+WATERSHED_PROCESSED_DATA_PATH = PROCESSED_DATA_FOLDER_PATH / 'qc_watershed_data.parquet'
+WATERSHED_PROCESSED_DATA_JSON_PATH = work_dir/ 'static' / 'qc_watershed_data.geojson'
+WATERSHED_RAW_DATA_PATH = work_dir / "data" / 'qcwatershed_data' / 'CE_bassin_multi.gdb'
 
 
 
@@ -37,8 +41,10 @@ if not CAN_PROCESSED_DATA_PATH.exists():
     'NFDB_poly.zip',
     )    
     gdf_can_fires = fx_process_canfire_data(CAN_RAW_DATA_FOLDER_PATH)
+else:
+    gdf_can_fires = gpd.read_parquet(CAN_PROCESSED_DATA_PATH)
 
-if not CAN_PROCESSED_DATA_PATH.exists():
+if not QC_PROCESSED_DATA_PATH.exists():
     fx_download_raw_data('qcfires_after76',
                      'https://diffusion.mffp.gouv.qc.ca/Diffusion/DonneeGratuite/Foret/PERTURBATIONS_NATURELLES/Feux_foret/02-Donnees/PROV/FEUX_PROV_GPKG.zip',
                      'FEUX_PROV_GPKG.zip')
@@ -46,12 +52,19 @@ if not CAN_PROCESSED_DATA_PATH.exists():
                      'https://diffusion.mffp.gouv.qc.ca/Diffusion/DonneeGratuite/Foret/PERTURBATIONS_NATURELLES/Feux_foret/02-Donnees/PROV/FEUX_ANCIENS_PROV_GPKG.zip'
                      'FEUX_PROV_GPKG.zip')
     gdf_qc_fires = fx_process_qcfire_data()
+else:
+    gdf_qc_fires = gpd.read_parquet(QC_PROCESSED_DATA_PATH)
 
+if not WATERSHED_PROCESSED_DATA_PATH.exists():
+    fx_download_raw_data(
+        'qcwatershed_data',
+        'https://stqc380donopppdtce01.blob.core.windows.net/donnees-ouvertes/Bassins_hydrographiques_multi_echelles/CE_bassin_multi.gdb.zip',
+        'CE_bassin_multi.gdb.zip',
+        )  
+    gdf_qc_watershed_data = fx_process_watershed_data()
+else:
+    gdf_qc_watershed_data = gpd.read_parquet(WATERSHED_PROCESSED_DATA_PATH)
 
-
-
-
-gdf_qc_watershed_data = fx_get_qc_watershed_data()
 gdf_fires = fx_merge_provincial_fires(gdf_qc_fires, gdf_can_fires)
 
 
