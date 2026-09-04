@@ -1,8 +1,9 @@
 __pycache__      
 static/qc_watershed_data.geojson            
-data/*                        
-!data/ontario_fires/      
-!data/ontario_fires/unprocessed_ontario_fires.parquet
+data/*    
+build/                     
+dist/     
+venv/             
 .venv312/
 .DS_Store
 test.ipynb
