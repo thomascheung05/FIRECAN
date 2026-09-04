@@ -1,6 +1,3 @@
-
-
-
 import zipfile
 import json
 import requests
@@ -15,10 +12,8 @@ import numpy as np
 import requests
 import json
 import geopandas as gpd
-from shapely.geometry import shape, Polygon, MultiPolygon, mapping
 from pathlib import Path
 from datetime import datetime
-import sys
 import math
 import shutil
 
@@ -113,6 +108,17 @@ def fx_download_raw_data(dataname, url, zipname):
     with zipfile.ZipFile(zip_path, 'r') as zip_ref:                                            # The data come in a zipfile so must unzip it
         zip_ref.extractall(savefolder)
     print(f'...... {timenow()} Download Complete')
+
+
+
+def download_processed_data(url: str, filename: str, dest_dir: Path) -> bool:
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        (dest_dir / filename).write_bytes(response.content)
+        return True
+    except requests.RequestException:
+        return False
 
 
     
