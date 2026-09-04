@@ -1,7 +1,6 @@
 #!/bin/bash
-set -e  # exit on any error
 
-# Move to the directory this script lives in, so it works regardless of where it's called from
+# Move to the directory this script lives in
 cd "$(dirname "$0")"
 
 # Create venv if it doesn't exist
@@ -10,12 +9,21 @@ if [ ! -d "venv" ]; then
   python3 -m venv venv
 fi
 
-# Activate venv
-source venv/bin/activate
+# Activate venv based on OS structure
+if [ -f "venv/Scripts/activate" ]; then
+  # Windows (Git Bash / MSYS2)
+  source venv/Scripts/activate
+elif [ -f "venv/bin/activate" ]; then
+  # macOS / Linux / WSL
+  source venv/bin/activate
+else
+  echo "Error: Could not find activation script."
+  exit 1
+fi
 
 # Install/update dependencies
-pip install --quiet --upgrade pip
-pip install --quiet -r requirements.txt
+python -m pip install --quiet --upgrade pip
+python -m pip install --quiet -r requirements.txt
 
 # Run the app
 echo "Starting app..."
