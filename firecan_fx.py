@@ -30,12 +30,15 @@ CAN_PROCESSED_DATA_PATH = PROCESSED_DATA_FOLDER_PATH / "can_processed_fire_data.
 CAN_RAW_DATA_FOLDER_PATH = work_dir / "data" / "canfire"
 CAN_RAW_DATA_PATH = work_dir / "data" / "canfire" / "NFDB_poly_1972to2020_20250630.shp"
 QC_PROCESSED_DATA_PATH = PROCESSED_DATA_FOLDER_PATH / 'qc_processed_fire_data.parquet'
-QC_BEFORE_RAW_DATA_PATH = work_dir / "data" / 'qcfires_before76' / 'FEUX_PROV.gpkg'
-QC_AFTER_RAW_DATA_PATH = work_dir / "data" / 'qcfires_after76' / 'FEUX_PROV.gpkg'
+QC_BEFORE_RAW_DATA_FOLDER_PATH = DATA_FOLDER_PATH / 'qcfires_before76' 
+QC_AFTER_RAW_DATA_FOLDER_PATH = DATA_FOLDER_PATH / 'qcfires_after76' 
+QC_BEFORE_RAW_DATA_PATH = QC_BEFORE_RAW_DATA_FOLDER_PATH / 'FEUX_ANCIENS_PROV.gpkg'
+QC_AFTER_RAW_DATA_PATH = QC_AFTER_RAW_DATA_FOLDER_PATH / 'FEUX_PROV.gpkg'
 WATERSHED_PROCESSED_DATA_PATH = PROCESSED_DATA_FOLDER_PATH / 'qc_watershed_data.parquet'
 WATERSHED_PROCESSED_DATA_JSON_PATH = work_dir/ 'static' / 'qc_watershed_data.geojson'
-WATERSHED_RAW_DATA_PATH = work_dir / "data" / 'qcwatershed_data' / 'CE_bassin_multi.gdb'
-
+WATERSHED_RAW_DATA_FOLDER_PATH = work_dir / "data" / 'qcwatershed_data' 
+WATERSHED_RAW_DATA_PATH = WATERSHED_RAW_DATA_FOLDER_PATH / 'CE_bassin_multi.gdb'
+TOTALFIRE_DATA_PATH = PROCESSED_DATA_FOLDER_PATH / 'TotalFire_data.parquet'
 
 
 
@@ -59,7 +62,6 @@ def repojectdata(data, targetcrs):
         return data
     else:
         data = data.to_crs(targetcrs)    
-        print('............ The data has been reprojectd')    
         return data
 
 
@@ -72,6 +74,7 @@ def create_data_folder():
     #################### ######################################## ######################################## ######################################## ####################    
     if not DATA_FOLDER_PATH.exists(): 
         DATA_FOLDER_PATH.mkdir(parents=True, exist_ok=True)
+        print('Data Folder Created')
 
 def create_processeddata_folder():
     #################### ######################################## ######################################## ######################################## ####################
@@ -79,6 +82,7 @@ def create_processeddata_folder():
     #################### ######################################## ######################################## ######################################## ####################    
     if not PROCESSED_DATA_FOLDER_PATH.exists(): 
         PROCESSED_DATA_FOLDER_PATH.mkdir(parents=True, exist_ok=True)
+        print('Processed Data Folder Created')
 
 
 
@@ -102,20 +106,17 @@ def fx_download_raw_data(dataname, url, zipname):
     savefolder = work_dir / "data" / dataname
     zip_path = savefolder / zipname                                                                # Name of zip file depends on the data being dowloaded, for fire data its the same but not for watershed data
                                                         
-    print(f'.... {timenow()} Downloading data for {dataname} (this may take up to 15 mintues)')   
     savefolder.mkdir(parents=True, exist_ok=True)
     response = requests.get(url)                                                               
     with open(zip_path, 'wb') as f:
         f.write(response.content)
     with zipfile.ZipFile(zip_path, 'r') as zip_ref:                                            # The data come in a zipfile so must unzip it
         zip_ref.extractall(savefolder)
-    print(f'...... {timenow()} The data for {dataname} has been dowloaded')
+    print(f'...... {timenow()} Download Complete')
 
 
     
 def fx_process_canfire_data():
-    print(f'........ {timenow()} Pre-Processing data now')
-
     
     gdf = gpd.read_file(CAN_RAW_DATA_PATH)
 
@@ -134,10 +135,8 @@ def fx_process_canfire_data():
     gdf['province'] = gdf['province'].replace(pc_to_province)    # Now we change all the province park codes to province codes in the province column
         
 
-    print(f'............ {timenow()} Re-Projecting Data')
     gdf = repojectdata(gdf, 4326) 
-
-    print(f'............ {timenow()} Done Pre-Processing saving for later use')     
+   
 
     gdf.to_parquet(CAN_PROCESSED_DATA_PATH)
     shutil.rmtree(CAN_RAW_DATA_FOLDER_PATH)   
@@ -156,7 +155,7 @@ def fx_process_qcfire_data():
     #################### ######################################## ######################################## ######################################## ####################
     # Merges the two datasets, reprojects it, then saves it as a parquet so we only have to do this once 
     #################### ######################################## ######################################## ######################################## ####################
-    print(f'........ {timenow()} Pre-Processing data now')
+    
     
     before_data = gpd.read_file(QC_BEFORE_RAW_DATA_PATH, layer= 'feux_anciens_prov')
     after_data = gpd.read_file(QC_AFTER_RAW_DATA_PATH, layer= 'feux_prov')
@@ -172,13 +171,13 @@ def fx_process_qcfire_data():
     merged_data = merged_data.rename(columns={'superficie': 'fire_size'})
     merged_data["province"] = "QC"
     
-    print(f'.......... {timenow()} Re-Projecting Data')
+
     merged_data = repojectdata(merged_data, 4326)
 
-    print(f'............ {timenow()} Done Pre-Processing saving for later use')
+    
     merged_data.to_parquet(QC_PROCESSED_DATA_PATH)
-    shutil.rmtree(QC_BEFORE_RAW_DATA_PATH) 
-    shutil.rmtree(QC_AFTER_RAW_DATA_PATH) 
+    shutil.rmtree(QC_BEFORE_RAW_DATA_FOLDER_PATH) 
+    shutil.rmtree(QC_AFTER_RAW_DATA_FOLDER_PATH) 
 
     return merged_data
 
@@ -202,8 +201,6 @@ def fx_process_watershed_data():
     # This function gets the watershed data, it then reads it in, drops some columns, and reprojects it, it also gives each watershed a unique name
     #################### ######################################## ######################################## ######################################## ####################       
                                                                 
-
-    print(f'...... {timenow()} Pre-Processing the Watershed Data') 
     watershed_data = gpd.read_file(WATERSHED_RAW_DATA_PATH, layer=1)
 
     watershed_data = watershed_data[watershed_data['NIVEAU_BASSIN'] == 1]
@@ -218,17 +215,15 @@ def fx_process_watershed_data():
     watershed_data['NOM_COURS_DEAU'] = watershed_data.groupby('NOM_COURS_DEAU').cumcount().add(1).astype(str).radd(watershed_data['NOM_COURS_DEAU'] + "-")
 
 
-    print(f'........ {timenow()} Reprojecting Watershed data') 
+    
     watershed_data = repojectdata(watershed_data, 4326)
 
-
-    print(f'.......... {timenow()} Saving Watershed Data (Parquet and GeoJson) For Later') 
     
     watershed_data.to_parquet(WATERSHED_PROCESSED_DATA_PATH)  
     watershed_data_togeojson=watershed_data
     watershed_data_togeojson["geometry"] = watershed_data_togeojson["geometry"].simplify(tolerance=0.01)            # Simplyfying the tolerance for the geojson watershed polygons to reduce server load 
     watershed_data_togeojson.to_file(WATERSHED_PROCESSED_DATA_JSON_PATH, driver="GeoJSON")                                 # saving as static geojson to be sent for watershed explorer
-    shutil.rmtree(WATERSHED_RAW_DATA_PATH) 
+    shutil.rmtree(WATERSHED_RAW_DATA_FOLDER_PATH) 
 
     return watershed_data
 
@@ -244,7 +239,10 @@ def fx_merge_provincial_fires(data1, data2):
 
     combined_gdf = gpd.GeoDataFrame(combined_gdf, geometry='geometry', crs=data1.crs)
     unique_provinces = combined_gdf['province'].unique()
-
+    
+    combined_gdf.to_parquet(TOTALFIRE_DATA_PATH)  
+    CAN_PROCESSED_DATA_PATH.unlink(missing_ok=True)
+    QC_PROCESSED_DATA_PATH.unlink(missing_ok=True)
     return combined_gdf
 
 

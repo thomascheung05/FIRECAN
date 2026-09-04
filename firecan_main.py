@@ -1,7 +1,7 @@
 MAX_SIZE_MB = 100
 
 
-from firecan_fx import fx_process_watershed_data,fx_process_qcfire_data,create_processeddata_folder,fx_process_canfire_data, fx_download_raw_data, fx_get_can_fire_data,convert_m_4326deg,fx_merge_provincial_fires,timenow,create_data_folder,fx_get_qc_fire_data,fx_filter_fires_data,fx_download_json,fx_download_csv,timenow, fx_download_gpkg, fx_get_qc_watershed_data
+from firecan_fx import fx_process_watershed_data,fx_process_qcfire_data,create_processeddata_folder,fx_process_canfire_data, fx_download_raw_data,convert_m_4326deg,fx_merge_provincial_fires,timenow,create_data_folder,fx_filter_fires_data,fx_download_json,fx_download_csv,timenow, fx_download_gpkg
 from flask import Flask, request # type: ignore
 import json
 import sys
@@ -10,6 +10,8 @@ import webbrowser
 import threading
 from pathlib import Path
 
+
+
 work_dir  = Path.cwd()
 DATA_FOLDER_PATH = work_dir / 'data'
 PROCESSED_DATA_FOLDER_PATH = work_dir / "data" / "processed_data"
@@ -17,12 +19,15 @@ CAN_PROCESSED_DATA_PATH = PROCESSED_DATA_FOLDER_PATH / "can_processed_fire_data.
 CAN_RAW_DATA_FOLDER_PATH = work_dir / "data" / "canfire"
 CAN_RAW_DATA_PATH = work_dir / "data" / "canfire" / "NFDB_poly_1972to2020_20250630.shp"
 QC_PROCESSED_DATA_PATH = PROCESSED_DATA_FOLDER_PATH / 'qc_processed_fire_data.parquet'
-QC_BEFORE_RAW_DATA_PATH = work_dir / "data" / 'qcfires_before76' / 'FEUX_PROV.gpkg'
-QC_AFTER_RAW_DATA_PATH = work_dir / "data" / 'qcfires_after76' / 'FEUX_PROV.gpkg'
+QC_BEFORE_RAW_DATA_FOLDER_PATH = DATA_FOLDER_PATH / 'qcfires_before76' 
+QC_AFTER_RAW_DATA_FOLDER_PATH = DATA_FOLDER_PATH / 'qcfires_after76' 
+QC_BEFORE_RAW_DATA_PATH = QC_BEFORE_RAW_DATA_FOLDER_PATH / 'FEUX_ANCIENS_PROV.gpkg'
+QC_AFTER_RAW_DATA_PATH = QC_AFTER_RAW_DATA_FOLDER_PATH / 'FEUX_PROV.gpkg'
 WATERSHED_PROCESSED_DATA_PATH = PROCESSED_DATA_FOLDER_PATH / 'qc_watershed_data.parquet'
 WATERSHED_PROCESSED_DATA_JSON_PATH = work_dir/ 'static' / 'qc_watershed_data.geojson'
-WATERSHED_RAW_DATA_PATH = work_dir / "data" / 'qcwatershed_data' / 'CE_bassin_multi.gdb'
-
+WATERSHED_RAW_DATA_FOLDER_PATH = work_dir / "data" / 'qcwatershed_data' 
+WATERSHED_RAW_DATA_PATH = WATERSHED_RAW_DATA_FOLDER_PATH / 'CE_bassin_multi.gdb'
+TOTALFIRE_DATA_PATH = PROCESSED_DATA_FOLDER_PATH / 'TotalFire_data.parquet'
 
 
 
@@ -31,66 +36,49 @@ WATERSHED_RAW_DATA_PATH = work_dir / "data" / 'qcwatershed_data' / 'CE_bassin_mu
 print('------------------------Starting data pre-loading. This may take a few minutes...', timenow(),'------------------------')                                      # This section here loads in the data, it uses the scrap donne quebec function and the process qc fire data fuction
 
 create_data_folder()
-create_processeddata_folder
+create_processeddata_folder()
 
-
-if not CAN_PROCESSED_DATA_PATH.exists():
-    fx_download_raw_data(
-    'canfire',
-    'https://cwfis.cfs.nrcan.gc.ca/downloads/nfdb/fire_poly/current_version/NFDB_poly.zip',
-    'NFDB_poly.zip',
-    )    
-    gdf_can_fires = fx_process_canfire_data(CAN_RAW_DATA_FOLDER_PATH)
+if TOTALFIRE_DATA_PATH.exists():
+    print(f'...... {timenow()} The Full Dataset Already Exists, Loading in Now')
+    gdf_fires = gpd.read_parquet(TOTALFIRE_DATA_PATH)
 else:
-    gdf_can_fires = gpd.read_parquet(CAN_PROCESSED_DATA_PATH)
+    if not CAN_PROCESSED_DATA_PATH.exists():
+        print(f'...... {timenow()} The Raw Canada Data Does Not Exist, Downloading Now')
+        fx_download_raw_data('canfire','https://cwfis.cfs.nrcan.gc.ca/downloads/nfdb/fire_poly/current_version/NFDB_poly.zip','NFDB_poly.zip',)    
+        print(f'............ {timenow()} Pre-Processing the Canada Data')  
+        gdf_can_fires = fx_process_canfire_data()
+        print(f'............ {timenow()} Pre-Processing Complete')  
+    else:
+        gdf_can_fires = gpd.read_parquet(CAN_PROCESSED_DATA_PATH)
 
-if not QC_PROCESSED_DATA_PATH.exists():
-    fx_download_raw_data('qcfires_after76',
-                     'https://diffusion.mffp.gouv.qc.ca/Diffusion/DonneeGratuite/Foret/PERTURBATIONS_NATURELLES/Feux_foret/02-Donnees/PROV/FEUX_PROV_GPKG.zip',
-                     'FEUX_PROV_GPKG.zip')
-    fx_download_raw_data('qcfires_before76',
-                     'https://diffusion.mffp.gouv.qc.ca/Diffusion/DonneeGratuite/Foret/PERTURBATIONS_NATURELLES/Feux_foret/02-Donnees/PROV/FEUX_ANCIENS_PROV_GPKG.zip'
-                     'FEUX_PROV_GPKG.zip')
-    gdf_qc_fires = fx_process_qcfire_data()
-else:
-    gdf_qc_fires = gpd.read_parquet(QC_PROCESSED_DATA_PATH)
+    if not QC_PROCESSED_DATA_PATH.exists():
+        print(f'...... {timenow()} The Raw Quebec Data Does Not Exist, Downloading Now (This May Take Up to 15 Minutes)')
+        if not QC_AFTER_RAW_DATA_PATH.exists():
+            fx_download_raw_data('qcfires_after76','https://diffusion.mffp.gouv.qc.ca/Diffusion/DonneeGratuite/Foret/PERTURBATIONS_NATURELLES/Feux_foret/02-Donnees/PROV/FEUX_PROV_GPKG.zip','FEUX_PROV_GPKG.zip')
+        if not QC_BEFORE_RAW_DATA_PATH.exists():
+            fx_download_raw_data('qcfires_before76','https://diffusion.mffp.gouv.qc.ca/Diffusion/DonneeGratuite/Foret/PERTURBATIONS_NATURELLES/Feux_foret/02-Donnees/PROV/FEUX_ANCIENS_PROV_GPKG.zip','FEUX_PROV_GPKG.zip')
+        print(f'............ {timenow()} Pre-Processing the QC Data')     
+        gdf_qc_fires = fx_process_qcfire_data()
+        print(f'............ {timenow()} Pre-Processing Complete')  
+    else:
+        gdf_qc_fires = gpd.read_parquet(QC_PROCESSED_DATA_PATH)
+    print(f'.................. {timenow()} Merging All Fire Data and Saving For Later Use')   
+    gdf_fires = fx_merge_provincial_fires(gdf_qc_fires, gdf_can_fires)
 
 if not WATERSHED_PROCESSED_DATA_PATH.exists():
+    print(f'...... {timenow()} The Raw Quebec Watershed Does Not Exist, Downloading Now')
     fx_download_raw_data(
         'qcwatershed_data',
         'https://stqc380donopppdtce01.blob.core.windows.net/donnees-ouvertes/Bassins_hydrographiques_multi_echelles/CE_bassin_multi.gdb.zip',
         'CE_bassin_multi.gdb.zip',
         )  
+    print(f'............ {timenow()} Pre-Processing the QC Watershed Data')   
     gdf_qc_watershed_data = fx_process_watershed_data()
+    print(f'............ {timenow()} Pre-Processing Complete')  
 else:
+    print(f'...... {timenow()} Loading in Watershed Data')
     gdf_qc_watershed_data = gpd.read_parquet(WATERSHED_PROCESSED_DATA_PATH)
-
-gdf_fires = fx_merge_provincial_fires(gdf_qc_fires, gdf_can_fires)
-
-
-# Change my functions above so that all the logic
-# Exists in this main script and not in the fx script
-# All the functions should be able to run standalone and the logic checks happen in this script
-# Also make sure the raw data is deleted after the processed data is saved could just delete the whole unprocessed data folder
-
-# After the raw data download dont have to return unzipped file path, we know the path just hard code it
-# Above relates to the fact that for cananada fires we are stopping at 2020 when there is another file for 2021-2022
-# Since the raw data path wont be hardcoded it will be easier to get both data fires from the canada database and combine them 
-
-
-# if parquest does not exist
-#     attempt to doanload it
-#     if download succeeds
-#         save  donload locally
-#         load it in  
-#     if download fails
-#         downlaod raw data
-#         process raw data 
-#         delete raw data
-#         save process data locally
-#         load in processed data
-# if parquest does exist
-#     laod in parquest        
+      
 print('---------------Data pre-loading complete. The app is now ready to serve requests.', timenow(),'------------------------')
 
 
