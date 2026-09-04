@@ -52,7 +52,7 @@ else:
         gdf_can_fires = gpd.read_parquet(CAN_PROCESSED_DATA_PATH)
 
     if not QC_PROCESSED_DATA_PATH.exists():
-        print(f'...... {timenow()} The Raw Quebec Data Does Not Exist, Downloading Now (This May Take Up to 15 Minutes)')
+        print(f'...... {timenow()} The Raw Quebec Data Does Not Exist, Downloading Now (This May Take Up to 20 Minutes)')
         if not QC_AFTER_RAW_DATA_PATH.exists():
             fx_download_raw_data('qcfires_after76','https://diffusion.mffp.gouv.qc.ca/Diffusion/DonneeGratuite/Foret/PERTURBATIONS_NATURELLES/Feux_foret/02-Donnees/PROV/FEUX_PROV_GPKG.zip','FEUX_PROV_GPKG.zip')
         if not QC_BEFORE_RAW_DATA_PATH.exists():
