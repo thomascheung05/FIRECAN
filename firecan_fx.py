@@ -16,9 +16,17 @@ from pathlib import Path
 from datetime import datetime
 import math
 import shutil
+import sys
 
+def get_work_dir() -> Path:
+    if getattr(sys, 'frozen', False):
+        base = Path(sys.executable).parent
+    else:
+        base = Path.cwd()  # unchanged for normal dev/script use
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+work_dir = get_work_dir()
 
-work_dir  = Path.cwd()
 DATA_FOLDER_PATH = work_dir / 'data'
 PROCESSED_DATA_FOLDER_PATH = work_dir / "data" / "processed_data"
 CAN_PROCESSED_DATA_PATH = PROCESSED_DATA_FOLDER_PATH / "can_processed_fire_data.parquet"  # processed data output

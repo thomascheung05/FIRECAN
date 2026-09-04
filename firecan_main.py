@@ -1,7 +1,7 @@
 MAX_SIZE_MB = 100
 
 
-from firecan_fx import download_processed_data,fx_process_watershed_data,fx_process_qcfire_data,create_processeddata_folder,fx_process_canfire_data, fx_download_raw_data,convert_m_4326deg,fx_merge_provincial_fires,timenow,create_data_folder,fx_filter_fires_data,fx_download_json,fx_download_csv,timenow, fx_download_gpkg
+from firecan_fx import get_work_dir, download_processed_data,fx_process_watershed_data,fx_process_qcfire_data,create_processeddata_folder,fx_process_canfire_data, fx_download_raw_data,convert_m_4326deg,fx_merge_provincial_fires,timenow,create_data_folder,fx_filter_fires_data,fx_download_json,fx_download_csv,timenow, fx_download_gpkg
 from flask import Flask, request # type: ignore
 import json
 import geopandas as gpd
@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 
-work_dir  = Path.cwd()
+work_dir = get_work_dir()
 DATA_FOLDER_PATH = work_dir / 'data'
 PROCESSED_DATA_FOLDER_PATH = work_dir / "data" / "processed_data"
 CAN_PROCESSED_DATA_PATH = PROCESSED_DATA_FOLDER_PATH / "can_processed_fire_data.parquet"  # processed data output
