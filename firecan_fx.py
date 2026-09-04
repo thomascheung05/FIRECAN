@@ -17,6 +17,7 @@ from pathlib import Path
 from datetime import datetime
 import sys
 import math
+import shutil
 work_dir  = Path.cwd()
  
 
@@ -89,31 +90,45 @@ def fx_download_raw_data(dataname, url, zipname):
 
 
     
+def fx_process_canfire_data(canfire_unzipped_file_path):
+    can_processed_data_folder_path = work_dir / "data" / 'processed_data'                                                   
+    can_processed_data_path = can_processed_data_folder_path / 'can_processed_fire_data.parquet'                # creating path for processed daata
+    can_raw_data_path = work_dir / "data" / "canfire"
+    
+    print(f'........ {timenow()} Pre-Processing data now')
+    if not can_processed_data_folder_path.exists():
+        can_processed_data_folder_path.mkdir(parents=True, exist_ok=True) # makes file for processed data
+    print(f'.......... {timenow()} Loading in Canada Data')
 
-def fx_get_url_request(dataname, url, zipname, gpkgname):        
-    #################### ######################################## ######################################## ######################################## ####################
-    # Checks if a dataset exists, if not it downloads it using a URL and unpacks the zip 
-    #################### ######################################## ######################################## ######################################## ####################    
-      
-    savefolder = work_dir / "data" / dataname
-    zip_path = savefolder / zipname                                                                # Name of zip file depends on the data being dowloaded, for fire data its the same but not for watershed data
-    unzipped_file_path = savefolder / gpkgname                                                     # This differs between quebec fire data, and also watershed data set
+    
+    gdf = gpd.read_file(canfire_unzipped_file_path)
 
-    if not unzipped_file_path.exists():                                                              # Checks if the GPKG file exists, if not it will create a folder and downlaod it 
-        print(f'.... {timenow()} The data does not exist for {dataname} Downloading now (this may take up to 15 mintues)')   
-        savefolder.mkdir(parents=True, exist_ok=True)
-        response = requests.get(url)                                                               
-        with open(zip_path, 'wb') as f:
-            f.write(response.content)
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:                                            # The data come in a zipfile so must unzip it
-            zip_ref.extractall(savefolder)
-        print(f'...... {timenow()} The data for {dataname} has been dowloaded')
-    else:                                                                                          # always chekcs if data is downloaded before downlaoding
-        print(f'...... {timenow()} The data for {dataname} is already downloaded')                
+    gdf = gdf[['YEAR', 'SIZE_HA', 'SRC_AGENCY', 'geometry']]
+    gdf = gdf.rename(columns={'YEAR': 'fire_year'})
+    gdf = gdf.rename(columns={'SIZE_HA': 'fire_size'})
+    gdf = gdf.rename(columns={'SRC_AGENCY': 'province'})  
 
-    return unzipped_file_path
+    pc_codes = ['PC-PA','PC-WB','PC-JA','PC-NA','PC-RM','PC-EI','PC-BA','PC-KO','PC-LM','PC-GL','PC-PU','PC-VU','PC-YO','PC-SY','PC-GR','PC-WP','PC-RE','PC-TN','PC-WL','PC-NI']
+    pc_to_province = {'PC-PA':'SK', 'PC-WB':'AB', 'PC-JA':'AB', 'PC-NA':'NT', 'PC-RM':'MB','PC-EI':'AB', 'PC-BA':'AB', 'PC-KO':'QC', 'PC-LM':'QC', 'PC-GL':'QC','PC-PU':'QC', 'PC-VU':'QC', 'PC-YO':'YT', 'PC-SY':'NT', 'PC-GR':'AB','PC-WP':'MB', 'PC-RE':'QC', 'PC-TN':'QC', 'PC-WL':'ON', 'PC-NI':'ON'}
+    parks_decoded = {'PC-PA': 'Prince Albert National Park','PC-WB': 'Wood Buffalo National Park','PC-JA': 'Jasper National Park','PC-NA': 'Nahanni National Park','PC-RM': 'Riding Mountain National Park','PC-EI': 'Elk Island National Park','PC-BA': 'Banff National Park','PC-KO': 'Kootenay National Park','PC-LM': 'La Mauricie National Park','PC-GL': 'Glacier National Park', 'PC-PU': 'Pukaskwa National Park','PC-VU': 'Vuntut National Park','PC-YO': 'Yoho National Park','PC-SY': 'Saoyú-ehdacho National Historic Site','PC-GR': 'Grasslands National Park','PC-WP': 'Wapusk National Park','PC-RE': 'Mount Revelstoke National Park','PC-TN': 'Terra Nova National Park','PC-WL': 'Waterton Lakes National Park','PC-NI': 'PC-NI'}
 
+    gdf = gdf[gdf['province'] != 'QC']              # gets ride of all QC fires, but not the ones that are in natinal parks as these ones have province = the national park they are in
+    gdf['pc'] = gdf['province'].where(gdf['province'].isin(pc_codes), '')     # creating parks column that contains only the provinces that had a parks code as the province   
+    gdf['pc'] = gdf['pc'].replace(parks_decoded)                            # in the parks column we change their parks code to an easier parks code 
+    gdf['province'] = gdf['province'].replace(pc_to_province)    # Now we change all the province park codes to province codes in the province column
+        
 
+    print(f'............ {timenow()} Re-Projecting Data')
+    gdf = repojectdata(gdf, 4326) 
+
+    print(f'............ {timenow()} Done Pre-Processing saving for later use')     
+
+    gdf.to_parquet(can_processed_data_path)
+    shutil.rmtree(can_raw_data_path)   
+    return gdf
+
+# print(f'........ {timenow()} The CAN data is already processed loading in now')                                                                                                # If there fire data is already processed we just load it in here
+# gdf = gpd.read_parquet(can_processed_data_path)
 
 
 
