@@ -18,6 +18,30 @@ gdf_qc_fires = fx_get_qc_fire_data()
 gdf_qc_watershed_data = fx_get_qc_watershed_data()
 gdf_fires = fx_merge_provincial_fires(gdf_qc_fires, gdf_can_fires)
 
+
+# Change my functions above so that all the logic
+# Exists in this main script and not in the fx script
+# All the functions should be able to run standalone and the logic checks happen in this script
+# Also make sure the raw data is deleted after the processed data is saved could just delete the whole unprocessed data folder
+
+# After the raw data download dont have to return unzipped file path, we know the path just hard code it
+# Above relates to the fact that for cananada fires we are stopping at 2020 when there is another file for 2021-2022
+# Since the raw data path wont be hardcoded it will be easier to get both data fires from the canada database and combine them 
+
+
+# if parquest does not exist
+#     attempt to doanload it
+#     if download succeeds
+#         save  donload locally
+#         load it in  
+#     if download fails
+#         downlaod raw data
+#         process raw data 
+#         delete raw data
+#         save process data locally
+#         load in processed data
+# if parquest does exist
+#     laod in parquest        
 print('---------------Data pre-loading complete. The app is now ready to serve requests.', timenow(),'------------------------')
 
 

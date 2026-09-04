@@ -112,7 +112,7 @@ def fx_get_can_fire_data():
     "NFDB_poly_1972to2020_20250630.shp"
     )          # Downloading data
    
-    can_processed_data_folder_path = work_dir / "data" / 'can_processed_data'                                                   
+    can_processed_data_folder_path = work_dir / "data" / 'processed_data'                                                   
     can_processed_data_path = can_processed_data_folder_path / 'can_processed_fire_data.parquet'                # creating path for processed daata
 
     if not can_processed_data_path.exists():# Check if data exists
@@ -170,7 +170,7 @@ def fx_get_qc_fire_data():
     qcfires_before76_unzipped_file_path = fx_get_url_request('qcfires_before76', url_qcfires_before76, qcfires_before76_zipname, qcfires_before76_gpkgname)
     qcfires_after76_unzipped_file_path = fx_get_url_request('qcfires_after76', url_qcfires_after76, qcfires_after76_zipname, qcfires_after76_gpkgname)          # DOwnloading data
 
-    qc_processed_data_folder_path = work_dir / "data" / 'qc_processed_data'
+    qc_processed_data_folder_path = work_dir / "data" / 'processed_data'
     qc_processed_data_path = qc_processed_data_folder_path / 'qc_processed_fire_data.parquet'
 
     if not qc_processed_data_path.exists():
@@ -219,7 +219,7 @@ def fx_get_qc_watershed_data():
 
     qcwatershed_unzipped_file_path = fx_get_url_request('qcwatershed_data', url_watersheddata, watersheddata_zipname, watersheddata_fgdbname)  # Downloadings                 
         
-    qc_processed_data_folder_path = work_dir / "data" / 'qc_processed_data'
+    qc_processed_data_folder_path = work_dir / "data" / 'processed_data'
     qc_watershed_data_path = qc_processed_data_folder_path / 'qc_watershed_data.parquet'
     qc_watershed_data_path_json = work_dir/ 'static' / 'qc_watershed_data.geojson'
 
