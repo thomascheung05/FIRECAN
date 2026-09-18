@@ -81,6 +81,9 @@ else:
     if downloaded:
         (f'......... {timenow()} Download Sucess, Loading in Dataset')
         gdf_qc_watershed_data = gpd.read_parquet(WATERSHED_PROCESSED_DATA_PATH)
+        watershed_data_togeojson=gdf_qc_watershed_data
+        watershed_data_togeojson["geometry"] = watershed_data_togeojson["geometry"].simplify(tolerance=0.01)            # Simplyfying the tolerance for the geojson watershed polygons to reduce server load 
+        watershed_data_togeojson.to_file(WATERSHED_PROCESSED_DATA_JSON_PATH, driver="GeoJSON")  
     else:
         print(f'...... {timenow()} The Raw Quebec Watershed Does Not Exist, Downloading Now')
         fx_download_raw_data(
