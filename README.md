@@ -2,7 +2,7 @@
 
 FIRECAN is a web-based mapping application that enables users to filter and visualize historical forest fire data across Canada. It processes and serves fire data from Donnees Quebec and the Canadian Wildland Fire Information System (CWFIS), allowing for dynamic exploration on an interactive map.
 
-The backend is built with Python using Flask and GeoPandas for data processing, while the frontend leverages Leaflet.js to render geographic data and provide an interactive user experience.
+The backend is built with Python using Flask and GeoPandas for data processing, while the frontend leverages Leaflet.js to render geographic data and provide an interactive user experience. 
 
 ## Features
 
