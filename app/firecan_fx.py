@@ -282,15 +282,19 @@ def fx_build_display_data(source_path=TOTALFIRE_DATA_PATH, display_path=DISPLAY_
     total = len(original_wkb)
 
     # Pass 1: simplify. Shapely releases the GIL, so threads work on batches in parallel.
-    batches = [original_wkb.slice(start, BUILD_BATCH_SIZE).to_numpy(zero_copy_only=False)
-               for start in range(0, total, BUILD_BATCH_SIZE)]
+    # Batches are created lazily, a few at a time, so only a small window is ever held as Python bytes.
+    batches = (original_wkb.slice(start, BUILD_BATCH_SIZE).to_numpy(zero_copy_only=False)
+               for start in range(0, total, BUILD_BATCH_SIZE))
     parts = {column: [] for column in DISPLAY_LEVELS.values()}
-    with ThreadPoolExecutor(min(4, os.cpu_count() or 1)) as pool:
-        for done, levels in enumerate(pool.map(_simplify_levels, batches), start=1):
-            for column, geometries in levels.items():
-                parts[column].append(geometries)
-            batches[done - 1] = None   # release each batch's Python bytes once simplified
-            print(f'......... {timenow()} Simplified {min(done * BUILD_BATCH_SIZE, total):,} of {total:,} fires')
+    workers = min(4, os.cpu_count() or 1)
+    done = 0
+    with ThreadPoolExecutor(workers) as pool:
+        while window := list(itertools.islice(batches, workers)):
+            for levels in pool.map(_simplify_levels, window):
+                for column, geometries in levels.items():
+                    parts[column].append(geometries)
+            done += sum(len(batch) for batch in window)
+            print(f'......... {timenow()} Simplified {done:,} of {total:,} fires')
     levels = {column: np.concatenate(geometries) for column, geometries in parts.items()}
 
     # Sort fires along a Hilbert curve so neighbouring fires get neighbouring fire_ids and land in the same
@@ -315,7 +319,8 @@ def fx_build_display_data(source_path=TOTALFIRE_DATA_PATH, display_path=DISPLAY_
             rows = order[start:start + STORE_ROW_GROUP_SIZE]
             writer.write_table(pa.table({
                 "fire_id": pa.array(np.arange(start, start + len(rows), dtype="int64")),
-                "geometry": original_wkb.take(pa.array(rows)).cast(pa.binary()),
+                # Row-by-row lookup: Arrow's take() overflows 32-bit offsets on a 2 GB binary column.
+                "geometry": pa.array([original_wkb[int(row)].as_py() for row in rows], pa.binary()),
             }, schema=store_schema))
     display.to_parquet(display_tmp, compression="zstd")
     # Swap in both files only once both are complete, so an interrupted build is simply redone.
