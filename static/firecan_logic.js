@@ -64,7 +64,9 @@ function finishMapStartup() {
   });
 }
 Esrimap.on('load', finishMapStartup);
-const map = L.map('map', { center: [58, -96], zoom: 4, layers: [Esrimap], zoomControl: false });
+// ==== [EFFICIENCY UPDATE] draw vector layers on one <canvas> instead of one SVG element per fire ====
+const map = L.map('map', { center: [58, -96], zoom: 4, layers: [Esrimap], zoomControl: false, preferCanvas: true });
+// ==== [END EFFICIENCY UPDATE] ====
 // Recheck after layout and whenever the container changes, including browser
 // restoration and mobile viewport changes that do not fire a window resize.
 let mapSizeFrame;
@@ -303,7 +305,7 @@ $('watershedExplorerButton').addEventListener('click', async () => {
     if (!response.ok) throw new Error('Could not load watershed boundaries. Try again.');
     const data = await response.json();
     if (!watershedMap) {
-      watershedMap = L.map('watershedMap', { center: [52.5, -69.8], zoom: 5 });
+      watershedMap = L.map('watershedMap', { center: [52.5, -69.8], zoom: 5, preferCanvas: true });   // [EFFICIENCY UPDATE] canvas renderer
       L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 18, attribution: 'Tiles © Esri' }).addTo(watershedMap);
     }
     watershedLayer = L.geoJSON(data, {

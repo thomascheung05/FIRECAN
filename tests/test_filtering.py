@@ -4,15 +4,17 @@ import io
 import json
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 
 import geopandas as gpd
-from shapely.geometry import Polygon, box, mapping, shape
+from shapely.geometry import Point, Polygon, box, mapping, shape
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'app'))
 from firecan_fx import fx_filter_fires_data, parse_polygon_geojson
+import firecan_fx
 
 
 class FilteringTests(unittest.TestCase):
@@ -94,6 +96,70 @@ class FilteringTests(unittest.TestCase):
             self.assertEqual(self.client.post('/fx_main', json=payload).status_code, 400)
         self.assertEqual(self.client.post('/fx_main', data='{', content_type='application/json').status_code, 400)
         self.assertEqual(self.client.post('/fx_main', data='x' * (10 * 1024 * 1024 + 65537), content_type='application/json').status_code, 413)
+
+
+    # ==== [EFFICIENCY UPDATE] gzip for large JSON and pages, never for attachments ====
+    def test_gzip_responses(self):
+        import gzip
+        boundary = mapping(Point(0, 0).buffer(1, 256))
+        response = self.client.post('/validate_polygon', json={'polygon_geojson': boundary}, headers={'Accept-Encoding': 'gzip'})
+        self.assertEqual(response.headers.get('Content-Encoding'), 'gzip')
+        self.assertEqual(json.loads(gzip.decompress(response.data))['geometry']['type'], 'Polygon')
+        page = self.client.get('/', headers={'Accept-Encoding': 'gzip'})
+        self.assertEqual(page.headers.get('Content-Encoding'), 'gzip')
+        self.assertIn(b'<html', gzip.decompress(page.data).lower())
+        page.close()
+        download = self.client.post('/fx_main', json={'download': 1, 'downloadFormat': 'csv'}, headers={'Accept-Encoding': 'gzip'})
+        self.assertNotIn('Content-Encoding', download.headers)
+    # ==== [END EFFICIENCY UPDATE] ====
+
+
+# ==== [EFFICIENCY UPDATE] pre-computed display levels, geometry store and gzip ====
+class DisplayDataTests(unittest.TestCase):
+    def test_build_levels_store_and_exports(self):
+        # Many-vertex circles so each display level visibly drops vertices.
+        fires = gpd.GeoDataFrame({
+            'province': ['QC', 'ON', 'QC', 'AB', 'QC'],
+            'fire_year': [2000, 2005, 2010, 2015, 2020],
+            'fire_size': [1.0, 2.0, 3.0, 4.0, 5.0],
+        }, geometry=[Point(x, 50).buffer(.05, 256) for x in (-70, -80, -71, -115, -72)], crs=4326)
+        with tempfile.TemporaryDirectory() as folder, \
+             patch.object(firecan_fx, 'BUILD_BATCH_SIZE', 2), patch.object(firecan_fx, 'STORE_ROW_GROUP_SIZE', 1):
+            folder = Path(folder)
+            source, display_path, store = folder / 'full.parquet', folder / 'display.parquet', folder / 'geometry.parquet'
+            fires.to_parquet(source)
+            firecan_fx.fx_build_display_data(source, display_path, store)
+            display = gpd.read_parquet(display_path)
+
+            # Fires are re-ordered spatially; each fire_id still pairs attributes with the right geometry.
+            self.assertEqual(display['fire_id'].tolist(), [0, 1, 2, 3, 4])
+            self.assertEqual(sorted(display['fire_year']), fires['fire_year'].tolist())
+            source_row = display['fire_year'].map(dict(zip(fires['fire_year'], fires.index)))
+            self.assertTrue(display.geometry.centroid.distance(gpd.GeoSeries(fires.geometry[source_row].values, index=display.index).centroid).max() < .01)
+            vertices = [display[column].count_coordinates().sum() for column in ('geometry', 'geom_250', 'geom_1000')]
+            self.assertLess(vertices[0], fires.count_coordinates().sum())
+            self.assertGreater(vertices[0], vertices[1])
+            self.assertGreaterEqual(vertices[1], vertices[2])
+
+            # The store returns originals, in the requested order, reading only the needed row groups.
+            originals = firecan_fx.fx_read_original_geometry([4, 1], store)
+            self.assertEqual([g.wkb for g in originals], [fires.geometry[source_row[4]].wkb, fires.geometry[source_row[1]].wkb])
+
+            subset = fx_filter_fires_data(display, None, ['QC'])['filtered_gdf']
+            exported = firecan_fx.fx_export_frame(subset, store_path=store)
+            self.assertEqual(list(exported.columns), ['province', 'fire_year', 'fire_size', 'geometry'])
+            self.assertEqual(exported.geometry.to_wkb().tolist(), fires.geometry[source_row[subset.index]].to_wkb().tolist())
+            self.assertNotIn('geometry', firecan_fx.fx_export_frame(subset, include_geometry=False, store_path=store).columns)
+
+            # 300 m reuses the 250 m level; 10 m is finer than any level and falls back to the originals.
+            shown = firecan_fx.fx_display_frame(subset, 300, store_path=store)
+            self.assertEqual(list(shown.columns), ['province', 'fire_year', 'fire_size', 'geometry'])
+            self.assertLessEqual(shown.count_coordinates().sum(), subset['geom_250'].count_coordinates().sum())
+            fine = firecan_fx.fx_display_frame(subset, 10, store_path=store)
+            self.assertGreater(fine.count_coordinates().sum(), subset.geometry.count_coordinates().sum())
+
+
+# ==== [END EFFICIENCY UPDATE] ====
 
 
 if __name__ == '__main__':

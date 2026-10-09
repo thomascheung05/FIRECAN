@@ -50,6 +50,19 @@ The first time you run the application, it will automatically create a VENV, ins
     *   Click **Export** to download the current filter selection as CSV, GeoJSON, or GeoPackage. Geometry exports keep the original fire boundaries.
     *   Open **About** for help and data-source links.
 
+<!-- ==== [EFFICIENCY UPDATE] ==== -->
+### Display data (one-time build)
+
+After the fire dataset is available, FIRECAN builds two files from it once (about 5–10 minutes) and uses them from then on:
+
+* `data/processed_data/TotalFire_display.parquet`: fire attributes plus boundaries pre-simplified for the map at 50 m, 250 m and 1 km. This is the only fire file loaded at startup.
+* `data/processed_data/TotalFire_geometry.parquet`: the original, full-detail boundaries. Exports read only the rows they need from it.
+
+The map uses the closest stored level at or below your display tolerance and simplifies further only when needed. Tolerances below 50 m read the original boundaries for the matching fires. Filters run on the 50 m boundaries, so a fire within about 50 m of a radius, watershed or uploaded boundary edge may be matched differently than with its full-detail outline. Exports always contain the original boundaries.
+
+To rebuild, delete both files and restart. `TotalFire_data.parquet` is no longer read after the build and can be deleted to free about 2 GB; it is downloaded again if a rebuild needs it.
+<!-- ==== [END EFFICIENCY UPDATE] ==== -->
+
 ## Configuration
 
 ### Result Size Limit

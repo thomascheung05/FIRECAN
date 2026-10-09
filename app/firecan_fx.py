@@ -11,6 +11,16 @@ from shapely.geometry import Point, shape
 from shapely.ops import unary_union
 import math
 import shutil
+# ==== [EFFICIENCY UPDATE] imports for pre-computed display geometry ====
+import itertools
+import os
+from concurrent.futures import ThreadPoolExecutor
+import numpy as np
+import pyarrow as pa
+import pyarrow.parquet as pq
+import shapely
+from pyproj import CRS
+# ==== [END EFFICIENCY UPDATE] ====
 
 
 
@@ -28,6 +38,10 @@ QC_AFTER_RAW_DATA_PATH = QC_AFTER_RAW_DATA_FOLDER_PATH / 'FEUX_PROV.gpkg'
 WATERSHED_PROCESSED_DATA_PATH = PROCESSED_DATA_FOLDER_PATH / 'watershed_data.parquet'
 WATERSHED_PROCESSED_DATA_JSON_PATH = work_dir/ 'static' / 'watershed_data.geojson'
 TOTALFIRE_DATA_PATH = PROCESSED_DATA_FOLDER_PATH / 'TotalFire_data.parquet'
+# ==== [EFFICIENCY UPDATE] derived files built once from TotalFire_data.parquet ====
+DISPLAY_DATA_PATH = PROCESSED_DATA_FOLDER_PATH / 'TotalFire_display.parquet'      # attributes + simplified geometry, loaded at startup
+GEOMETRY_STORE_PATH = PROCESSED_DATA_FOLDER_PATH / 'TotalFire_geometry.parquet'   # original geometry, read on demand for exports
+# ==== [END EFFICIENCY UPDATE] ====
 
 
 
@@ -188,13 +202,21 @@ def fx_process_watershed_data(gdf):
     gdf = repojectdata(gdf, 4326)
     
     gdf.to_parquet(WATERSHED_PROCESSED_DATA_PATH)
-    gdftogeojson=gdf
-    gdftogeojson["geometry"] = gdftogeojson["geometry"].simplify(tolerance=0.01)            # Simplyfying the tolerance for the geojson watershed polygons to reduce server load 
-    gdftogeojson.to_file(WATERSHED_PROCESSED_DATA_JSON_PATH, driver="GeoJSON") 
-    
-    
-    
-    
+    # ==== [EFFICIENCY UPDATE] bug fix: the old code simplified `gdf` in place (gdftogeojson was an alias)
+    # and returned nothing, so the startup fallback set gdf_watershed_data to None. ====
+    fx_write_watershed_geojson(gdf)
+    return gdf
+    # ==== [END EFFICIENCY UPDATE] ====
+
+
+# ==== [EFFICIENCY UPDATE] smaller watershed GeoJSON for the Watershed Explorer ====
+def fx_write_watershed_geojson(gdf, path=WATERSHED_PROCESSED_DATA_JSON_PATH):
+    # Polygons are simplified to 0.01 degrees (about 1 km), so 4 decimal places (about 10 m) loses nothing
+    # visible while cutting the file size; it is also gzip-compressed when served.
+    watershed_data_togeojson = gdf[["watershed_name", "geometry"]].copy()
+    watershed_data_togeojson["geometry"] = watershed_data_togeojson["geometry"].simplify(tolerance=0.01)
+    watershed_data_togeojson.to_file(path, driver="GeoJSON", COORDINATE_PRECISION=4)
+# ==== [END EFFICIENCY UPDATE] ====
 
 
 
@@ -216,6 +238,158 @@ def fx_merge_provincial_fires(data1, data2):
 
 
 
+
+
+# ==== [EFFICIENCY UPDATE] Pre-computed display geometry + on-disk original geometry store ====
+# Simplifying full-resolution polygons was the slowest part of every map request (roughly 9 minutes of CPU
+# to simplify all 150k fires at 50 m). It now happens once, at fixed detail levels, and the original
+# boundaries stay on disk where exports read only the row groups they need. Startup loads only the small
+# display file instead of the 2 GB full-resolution dataset.
+#
+# Note: map filtering runs on the 50 m geometry, so a fire within ~50 m of a radius, watershed or uploaded
+# boundary edge can be included or excluded differently than with the full-resolution boundary.
+DISPLAY_LEVELS = {50: "geometry", 250: "geom_250", 1000: "geom_1000"}   # tolerance (m) -> column, finest first
+DISPLAY_PRECISION_DEG = 1e-6        # about 0.1 m; far finer than any display tolerance
+DISPLAY_REFERENCE_LAT = 45          # same latitude fx_main has always used to convert metres to degrees
+BUILD_BATCH_SIZE = 4000
+STORE_ROW_GROUP_SIZE = 500          # with the spatial sort, small row groups let exports skip most of the file
+
+
+def _simplify_levels(wkb_values):
+    geometries = shapely.from_wkb(wkb_values)
+    levels = {}
+    for metres, column in DISPLAY_LEVELS.items():
+        # Each level starts from the previous, already simplified, one; far cheaper than full detail.
+        geometries = shapely.simplify(geometries, convert_m_4326deg(metres, DISPLAY_REFERENCE_LAT), preserve_topology=True)
+        # Some source fire polygons are invalid (self-intersections), which set_precision rejects; repair just those.
+        invalid = ~shapely.is_valid(geometries) & ~shapely.is_missing(geometries)
+        geometries[invalid] = shapely.make_valid(geometries[invalid])
+        levels[column] = shapely.set_precision(geometries, DISPLAY_PRECISION_DEG)
+    return levels
+
+
+def fx_build_display_data(source_path=TOTALFIRE_DATA_PATH, display_path=DISPLAY_DATA_PATH, store_path=GEOMETRY_STORE_PATH):
+    """Read the full dataset once to write the display file and the original geometry store."""
+    source = pq.ParquetFile(source_path)
+    geo = json.loads(source.schema_arrow.metadata[b"geo"])
+    geometry_column = geo["primary_column"]
+    crs = geo["columns"][geometry_column].get("crs", "OGC:CRS84")
+    crs = CRS.from_json_dict(crs) if isinstance(crs, dict) else CRS.from_user_input(crs)
+    attribute_columns = [name for name in source.schema_arrow.names if name != geometry_column and not name.startswith("__index")]
+    attributes = source.read(columns=attribute_columns).to_pandas().reset_index(drop=True)
+    # Original WKB stays as one compact Arrow buffer; only small batches become Python objects at a time.
+    original_wkb = source.read(columns=[geometry_column]).column(0)
+    total = len(original_wkb)
+
+    # Pass 1: simplify. Shapely releases the GIL, so threads work on batches in parallel.
+    batches = [original_wkb.slice(start, BUILD_BATCH_SIZE).to_numpy(zero_copy_only=False)
+               for start in range(0, total, BUILD_BATCH_SIZE)]
+    parts = {column: [] for column in DISPLAY_LEVELS.values()}
+    with ThreadPoolExecutor(min(4, os.cpu_count() or 1)) as pool:
+        for done, levels in enumerate(pool.map(_simplify_levels, batches), start=1):
+            for column, geometries in levels.items():
+                parts[column].append(geometries)
+            batches[done - 1] = None   # release each batch's Python bytes once simplified
+            print(f'......... {timenow()} Simplified {min(done * BUILD_BATCH_SIZE, total):,} of {total:,} fires')
+    levels = {column: np.concatenate(geometries) for column, geometries in parts.items()}
+
+    # Sort fires along a Hilbert curve so neighbouring fires get neighbouring fire_ids and land in the same
+    # row groups; an export of one area then reads a few row groups instead of most of the file.
+    coarse = gpd.GeoSeries(levels[DISPLAY_LEVELS[max(DISPLAY_LEVELS)]], crs=crs)
+    bounds = coarse.bounds.fillna(0)
+    centres = gpd.GeoSeries(gpd.points_from_xy((bounds.minx + bounds.maxx) / 2, (bounds.miny + bounds.maxy) / 2), crs=crs)
+    order = np.argsort(centres.hilbert_distance(), kind="stable")
+
+    display = gpd.GeoDataFrame(attributes.iloc[order].reset_index(drop=True),
+                               geometry=gpd.GeoSeries(levels["geometry"][order], crs=crs), crs=crs)
+    display.insert(0, "fire_id", np.arange(total, dtype="int64"))
+    for column in list(DISPLAY_LEVELS.values())[1:]:
+        display[column] = gpd.GeoSeries(levels[column][order], crs=crs)
+
+    # Pass 2: write the untouched original WKB in the same order, in small row groups.
+    display_tmp = display_path.with_suffix(".tmp")
+    store_tmp = store_path.with_suffix(".tmp")
+    store_schema = pa.schema([("fire_id", pa.int64()), ("geometry", pa.binary())])
+    with pq.ParquetWriter(store_tmp, store_schema, compression="zstd") as writer:
+        for start in range(0, total, STORE_ROW_GROUP_SIZE):
+            rows = order[start:start + STORE_ROW_GROUP_SIZE]
+            writer.write_table(pa.table({
+                "fire_id": pa.array(np.arange(start, start + len(rows), dtype="int64")),
+                "geometry": original_wkb.take(pa.array(rows)).cast(pa.binary()),
+            }, schema=store_schema))
+    display.to_parquet(display_tmp, compression="zstd")
+    # Swap in both files only once both are complete, so an interrupted build is simply redone.
+    os.replace(store_tmp, store_path)
+    os.replace(display_tmp, display_path)
+
+
+def fx_read_original_geometry(fire_ids, store_path=GEOMETRY_STORE_PATH):
+    """Return original geometries for fire_ids, in the given order, reading only the row groups that hold them."""
+    fire_ids = np.asarray(fire_ids, dtype="int64")
+    wanted = np.unique(fire_ids)
+    store = pq.ParquetFile(store_path)
+    row_groups = []
+    for i in range(store.metadata.num_row_groups):
+        stats = store.metadata.row_group(i).column(0).statistics
+        first = np.searchsorted(wanted, stats.min)
+        if first < len(wanted) and wanted[first] <= stats.max:
+            row_groups.append(i)
+    table = store.read_row_groups(row_groups, columns=["fire_id", "geometry"]) if row_groups else store.schema_arrow.empty_table()
+    by_id = pd.Series(table.column("geometry").to_numpy(zero_copy_only=False), index=table.column("fire_id").to_numpy())
+    return shapely.from_wkb(by_id.reindex(fire_ids).to_numpy())
+
+
+def _has_display_levels(gdf):
+    return "fire_id" in gdf.columns and all(column in gdf.columns for column in DISPLAY_LEVELS.values())
+
+
+def _without_display_columns(gdf):
+    extra = [column for column in (*list(DISPLAY_LEVELS.values())[1:], "fire_id") if column in gdf.columns]
+    return gdf.drop(columns=extra)
+
+
+def fx_display_frame(filtered_gdf, tolerance_m, store_path=GEOMETRY_STORE_PATH):
+    """Build the map layer in EPSG:4326 at tolerance_m, reusing the nearest finer pre-computed level."""
+    finished_m = 0
+    if _has_display_levels(filtered_gdf):
+        ready = [metres for metres in DISPLAY_LEVELS if metres <= tolerance_m]
+        if ready:
+            finished_m = max(ready)
+            geometries = filtered_gdf[DISPLAY_LEVELS[finished_m]].values
+        else:
+            # Finer than any stored level: fall back to the original boundaries for just these fires.
+            geometries = fx_read_original_geometry(filtered_gdf["fire_id"], store_path)
+    else:
+        geometries = filtered_gdf.geometry.values
+    geometries = gpd.GeoSeries(geometries, index=filtered_gdf.index, crs=filtered_gdf.crs)
+    if geometries.crs is None or geometries.crs.to_epsg() != 4326:
+        geometries = geometries.to_crs("EPSG:4326")
+    if tolerance_m > finished_m:
+        # Starting from a stored level, this only removes a few more vertices, so it is cheap.
+        geometries = geometries.simplify(convert_m_4326deg(tolerance_m, DISPLAY_REFERENCE_LAT), preserve_topology=True)
+    attributes = _without_display_columns(filtered_gdf).drop(columns=filtered_gdf.geometry.name)
+    return gpd.GeoDataFrame(attributes, geometry=geometries, crs=geometries.crs)
+
+
+def fx_export_frame(filtered_gdf, include_geometry=True, store_path=GEOMETRY_STORE_PATH):
+    """Return filtered fires with their original, unsimplified geometry, as exports always have."""
+    export = _without_display_columns(filtered_gdf)
+    if not include_geometry:
+        return export.drop(columns=export.geometry.name)
+    if "fire_id" in filtered_gdf.columns:
+        export = export.copy()
+        export[export.geometry.name] = gpd.GeoSeries(
+            fx_read_original_geometry(filtered_gdf["fire_id"], store_path), index=export.index, crs=export.crs,
+        )
+    return export
+
+
+def _spatial_match(fire_gdf, filtered_gdf, geometry, predicate):
+    # Query the index of the full dataset, built once and cached by GeoPandas, instead of rebuilding an
+    # index for every filtered subset or testing each fire one by one. Assumes a unique index (a RangeIndex here).
+    positions = fire_gdf.sindex.query(geometry, predicate=predicate)
+    return filtered_gdf[filtered_gdf.index.isin(fire_gdf.index[positions])]
+# ==== [END EFFICIENCY UPDATE] ====
 
 
 POLYGON_MAX_BYTES = 10 * 1024 * 1024
@@ -347,7 +521,9 @@ def fx_filter_fires_data(
         user_point = gpd.GeoSeries([Point(lon, lat)], crs="EPSG:4326")
         buffer_deg = user_point.to_crs(user_point.estimate_utm_crs()).buffer(radius * 1000).to_crs("EPSG:4326")
         buffer_filter = buffer_deg.to_crs(fire_gdf.crs).iloc[0]
-        filtered_gdf = filtered_gdf[filtered_gdf.geometry.intersects(buffer_filter)]
+        # ==== [EFFICIENCY UPDATE] spatial index instead of testing every fire ====
+        filtered_gdf = _spatial_match(fire_gdf, filtered_gdf, buffer_filter, "intersects")
+        # ==== [END EFFICIENCY UPDATE] ====
 
     if watershed_name:
         if not isinstance(watershed_name, str):
@@ -357,14 +533,16 @@ def fx_filter_fires_data(
             raise ValueError(f'No watershed found with name "{watershed_name}".')
         watershed_polygon = selected_ws.geometry.union_all()
         watershed_filter = gpd.GeoSeries([watershed_polygon], crs=watershed_data.crs).to_crs(fire_gdf.crs).iloc[0]
-        filtered_gdf = filtered_gdf[filtered_gdf.geometry.within(watershed_filter)]
+        # ==== [EFFICIENCY UPDATE] spatial index; "watershed contains fire" is the same test as "fire within watershed" ====
+        filtered_gdf = _spatial_match(fire_gdf, filtered_gdf, watershed_filter, "contains")
+        # ==== [END EFFICIENCY UPDATE] ====
 
     if polygon_geojson is not None:
         boundary = parse_polygon_geojson(polygon_geojson)
         boundary = gpd.GeoSeries([boundary], crs="EPSG:4326").to_crs(fire_gdf.crs).iloc[0]
-        # Query the spatial index to avoid comparing every fire to a complex boundary.
-        indices = filtered_gdf.sindex.query(boundary, predicate="intersects")
-        filtered_gdf = filtered_gdf.iloc[sorted(indices)]
+        # ==== [EFFICIENCY UPDATE] reuse the full dataset's cached index rather than building one per request ====
+        filtered_gdf = _spatial_match(fire_gdf, filtered_gdf, boundary, "intersects")
+        # ==== [END EFFICIENCY UPDATE] ====
 
     return {
         "filtered_gdf": filtered_gdf.copy(),
@@ -379,20 +557,18 @@ def fx_download_json(filtered_data, MAX_SIZE_MB):
     # This function is to dowload the filtered data as a geojson 
     #################### ######################################## ######################################## ######################################## #################### 
                               
-    geojson_data = json.loads(filtered_data.to_json())     
-    
+    # ==== [EFFICIENCY UPDATE] serialize once; the old code went to_json -> loads -> dumps -> dumps ====
+    geojson_encoded = filtered_data.to_json().encode('utf-8')
 
     MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024
-    geojson_bytes = len(json.dumps(geojson_data).encode('utf-8'))
+    geojson_bytes = len(geojson_encoded)
     print(f'File size:{geojson_bytes/1000000}')
     if geojson_bytes > MAX_SIZE_BYTES:
         print(f'{geojson_bytes} is too big')
         return {"error": f"Data too large to load ({geojson_bytes / 1024 / 1024:.2f} MB). Please re-fresh and narrow your filter."}, 413
 
-
-    geojson_string = json.dumps(geojson_data) 
-    geojson_buffer = io.BytesIO(geojson_string.encode('utf-8'))   
-    geojson_buffer.seek(0)
+    geojson_buffer = io.BytesIO(geojson_encoded)
+    # ==== [END EFFICIENCY UPDATE] ====
 
     return send_file(                                                                                       # Send the file back to the browser as an attachment
 

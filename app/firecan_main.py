@@ -8,8 +8,13 @@ from firecan_fx import (
     convert_m_4326deg, fx_merge_provincial_fires, timenow, create_data_folder,
     fx_filter_fires_data, fx_download_json, fx_download_csv, fx_download_gpkg,
     filter_number, parse_polygon_geojson, POLYGON_MAX_BYTES,
+    # ==== [EFFICIENCY UPDATE] ====
+    fx_build_display_data, fx_display_frame, fx_export_frame, fx_write_watershed_geojson,
+    DISPLAY_DATA_PATH, GEOMETRY_STORE_PATH,
+    # ==== [END EFFICIENCY UPDATE] ====
 )
-from flask import Flask, request, jsonify # type: ignore
+from flask import Flask, request, jsonify, Response # type: ignore
+import gzip
 import json
 import geopandas as gpd
 import webbrowser
@@ -45,53 +50,65 @@ print('------------------------Starting data pre-loading. This may take a few mi
 create_data_folder()
 create_processeddata_folder()
 
-if TOTALFIRE_DATA_PATH.exists():
-    print(f'...... {timenow()} The Full Dataset Already Exists, Loading in Now')
-    gdf_fires = gpd.read_parquet(TOTALFIRE_DATA_PATH)
-else: 
-    print(f'...... {timenow()} Attempting to Download Fire Data from Git')
-    downloaded = download_processed_data('https://github.com/thomascheung05/FIRECAN/releases/download/DataV1/TotalFire_data.parquet', 'TotalFire_data.parquet', PROCESSED_DATA_FOLDER_PATH)
-    if downloaded:
-        (f'......... {timenow()} Download Sucess, Loading in Dataset')
-        gdf_fires = gpd.read_parquet(TOTALFIRE_DATA_PATH)
-    else:
-        if not CAN_PROCESSED_DATA_PATH.exists():
-            print(f'...... {timenow()} The Raw Canada Data Does Not Exist, Downloading Now')
-            fx_download_raw_data('canfire','https://cwfis.cfs.nrcan.gc.ca/downloads/nfdb/fire_poly/current_version/NFDB_poly.zip','NFDB_poly.zip',)    
-            print(f'............ {timenow()} Pre-Processing the Canada Data')  
-            gdf_can_fires = fx_process_canfire_data()
-            print(f'............ {timenow()} Pre-Processing Complete')  
+# ==== [EFFICIENCY UPDATE] load the small pre-computed display file instead of the 2 GB full dataset ====
+# The full dataset is now only needed once, to build TotalFire_display.parquet and TotalFire_geometry.parquet.
+# The download / raw-processing steps below are unchanged apart from no longer loading the result.
+if not (DISPLAY_DATA_PATH.exists() and GEOMETRY_STORE_PATH.exists()):
+    if not TOTALFIRE_DATA_PATH.exists():
+        print(f'...... {timenow()} Attempting to Download Fire Data from Git')
+        downloaded = download_processed_data('https://github.com/thomascheung05/FIRECAN/releases/download/DataV1/TotalFire_data.parquet', 'TotalFire_data.parquet', PROCESSED_DATA_FOLDER_PATH)
+        if downloaded:
+            print(f'......... {timenow()} Download Success')   # bug fix: this message was missing print()
         else:
-            gdf_can_fires = gpd.read_parquet(CAN_PROCESSED_DATA_PATH)
+            if not CAN_PROCESSED_DATA_PATH.exists():
+                print(f'...... {timenow()} The Raw Canada Data Does Not Exist, Downloading Now')
+                fx_download_raw_data('canfire','https://cwfis.cfs.nrcan.gc.ca/downloads/nfdb/fire_poly/current_version/NFDB_poly.zip','NFDB_poly.zip',)    
+                print(f'............ {timenow()} Pre-Processing the Canada Data')  
+                gdf_can_fires = fx_process_canfire_data()
+                print(f'............ {timenow()} Pre-Processing Complete')  
+            else:
+                gdf_can_fires = gpd.read_parquet(CAN_PROCESSED_DATA_PATH)
 
-        if not QC_PROCESSED_DATA_PATH.exists():
-            print(f'...... {timenow()} The Raw Quebec Data Does Not Exist, Downloading Now (This May Take Up to 20 Minutes)')
-            if not QC_AFTER_RAW_DATA_PATH.exists():
-                fx_download_raw_data('qcfires_after76','https://diffusion.mffp.gouv.qc.ca/Diffusion/DonneeGratuite/Foret/PERTURBATIONS_NATURELLES/Feux_foret/02-Donnees/PROV/FEUX_PROV_GPKG.zip','FEUX_PROV_GPKG.zip')
-            if not QC_BEFORE_RAW_DATA_PATH.exists():
-                fx_download_raw_data('qcfires_before76','https://diffusion.mffp.gouv.qc.ca/Diffusion/DonneeGratuite/Foret/PERTURBATIONS_NATURELLES/Feux_foret/02-Donnees/PROV/FEUX_ANCIENS_PROV_GPKG.zip','FEUX_PROV_GPKG.zip')
-            print(f'............ {timenow()} Pre-Processing the QC Data')     
-            gdf_qc_fires = fx_process_qcfire_data()
-            print(f'............ {timenow()} Pre-Processing Complete')  
-        else:
-            gdf_qc_fires = gpd.read_parquet(QC_PROCESSED_DATA_PATH)
-        print(f'.................. {timenow()} Merging All Fire Data and Saving For Later Use')   
-        gdf_fires = fx_merge_provincial_fires(gdf_qc_fires, gdf_can_fires)
+            if not QC_PROCESSED_DATA_PATH.exists():
+                print(f'...... {timenow()} The Raw Quebec Data Does Not Exist, Downloading Now (This May Take Up to 20 Minutes)')
+                if not QC_AFTER_RAW_DATA_PATH.exists():
+                    fx_download_raw_data('qcfires_after76','https://diffusion.mffp.gouv.qc.ca/Diffusion/DonneeGratuite/Foret/PERTURBATIONS_NATURELLES/Feux_foret/02-Donnees/PROV/FEUX_PROV_GPKG.zip','FEUX_PROV_GPKG.zip')
+                if not QC_BEFORE_RAW_DATA_PATH.exists():
+                    fx_download_raw_data('qcfires_before76','https://diffusion.mffp.gouv.qc.ca/Diffusion/DonneeGratuite/Foret/PERTURBATIONS_NATURELLES/Feux_foret/02-Donnees/PROV/FEUX_ANCIENS_PROV_GPKG.zip','FEUX_PROV_GPKG.zip')
+                print(f'............ {timenow()} Pre-Processing the QC Data')     
+                gdf_qc_fires = fx_process_qcfire_data()
+                print(f'............ {timenow()} Pre-Processing Complete')  
+            else:
+                gdf_qc_fires = gpd.read_parquet(QC_PROCESSED_DATA_PATH)
+            print(f'.................. {timenow()} Merging All Fire Data and Saving For Later Use')   
+            fx_merge_provincial_fires(gdf_qc_fires, gdf_can_fires)
+            del gdf_qc_fires, gdf_can_fires
+    print(f'...... {timenow()} Building Display Data (one-time step, a few minutes)')
+    fx_build_display_data()
+
+print(f'...... {timenow()} Loading in Fire Display Data')
+gdf_fires = gpd.read_parquet(DISPLAY_DATA_PATH)
+gdf_fires.sindex   # build the spatial index now so the first filter request does not pay for it
+# ==== [END EFFICIENCY UPDATE] ====
 
 
 
 if WATERSHED_PROCESSED_DATA_PATH.exists() and WATERSHED_PROCESSED_DATA_JSON_PATH.exists():
     print(f'...... {timenow()} Loading in Watershed Data')
     gdf_watershed_data = gpd.read_parquet(WATERSHED_PROCESSED_DATA_PATH)
+# ==== [EFFICIENCY UPDATE] rebuild only the GeoJSON when the parquet is already here, instead of re-downloading ====
+elif WATERSHED_PROCESSED_DATA_PATH.exists():
+    print(f'...... {timenow()} Rebuilding Watershed GeoJSON')
+    gdf_watershed_data = gpd.read_parquet(WATERSHED_PROCESSED_DATA_PATH)
+    fx_write_watershed_geojson(gdf_watershed_data)
+# ==== [END EFFICIENCY UPDATE] ====
 else:
     print(f'...... {timenow()} Attempting to Download Watershed Data from Git')
     downloaded = download_processed_data('https://github.com/thomascheung05/FIRECAN/releases/download/DataV1/watershed_data.parquet', 'watershed_data.parquet', PROCESSED_DATA_FOLDER_PATH)
     if downloaded:
-        (f'......... {timenow()} Download Sucess, Loading in Dataset')
+        print(f'......... {timenow()} Download Success, Loading in Dataset')   # [EFFICIENCY UPDATE] bug fix: missing print()
         gdf_watershed_data = gpd.read_parquet(WATERSHED_PROCESSED_DATA_PATH)
-        watershed_data_togeojson=gdf_watershed_data.copy()
-        watershed_data_togeojson["geometry"] = watershed_data_togeojson["geometry"].simplify(tolerance=0.01)            # Simplyfying the tolerance for the geojson watershed polygons to reduce server load 
-        watershed_data_togeojson.to_file(WATERSHED_PROCESSED_DATA_JSON_PATH, driver="GeoJSON")  #####
+        fx_write_watershed_geojson(gdf_watershed_data)   # [EFFICIENCY UPDATE] shared writer with smaller output
     else:
         print(f'...... {timenow()} The Raw Watershed Does Not Exist, Downloading Now')
         Watershed_data_url = ("https://services.arcgis.com/As5CFN3ThbQpy8Ph/arcgis/rest/services/1Watersheds/FeatureServer/0/query"
@@ -111,6 +128,29 @@ print('---------------Data pre-loading complete. The app is now ready to serve r
 app = Flask(__name__, static_folder=str(work_dir / 'static'))                                                     # This starts FLASK which allows me to talk back and forth with my web page and my java script
 # Allow the boundary plus a small amount of JSON filter metadata.
 app.config["MAX_CONTENT_LENGTH"] = POLYGON_MAX_BYTES + 64 * 1024
+
+
+# ==== [EFFICIENCY UPDATE] gzip text responses (GeoJSON compresses roughly 5-10x) ====
+GZIP_MIMETYPES = {"application/json", "application/geo+json", "text/html", "text/css",
+                  "text/javascript", "application/javascript"}
+
+@app.after_request
+def gzip_response(response):
+    if (response.status_code != 200
+            or "gzip" not in request.headers.get("Accept-Encoding", "")
+            or "Content-Encoding" in response.headers
+            or "attachment" in response.headers.get("Content-Disposition", "")
+            or (response.mimetype not in GZIP_MIMETYPES and not request.path.endswith(".geojson"))):
+        return response
+    response.direct_passthrough = False   # static files stream from disk; read them so they can be compressed
+    data = response.get_data()
+    if len(data) < 1024:
+        return response
+    response.set_data(gzip.compress(data, compresslevel=5))
+    response.headers["Content-Encoding"] = "gzip"
+    response.headers.add("Vary", "Accept-Encoding")
+    return response
+# ==== [END EFFICIENCY UPDATE] ====
 
 
 @app.errorhandler(RequestEntityTooLarge)
@@ -166,31 +206,32 @@ def fx_main():
         return jsonify(error=str(exc) if not isinstance(exc, BadRequest) else "Could not read the JSON request."), 400
 
     filtered_data = results["filtered_gdf"]
+    # ==== [EFFICIENCY UPDATE] exports read original boundaries from the geometry store; CSV skips geometry entirely ====
     if download:
         if download_format == "json":
-            return fx_download_json(filtered_data, MAX_SIZE_MB)
+            return fx_download_json(fx_export_frame(filtered_data), MAX_SIZE_MB)
         if download_format == "csv":
-            return fx_download_csv(filtered_data)
-        return fx_download_gpkg(filtered_data, MAX_SIZE_MB)
+            return fx_download_csv(fx_export_frame(filtered_data, include_geometry=False))
+        return fx_download_gpkg(fx_export_frame(filtered_data), MAX_SIZE_MB)
 
-    # Display simplification must never change the shared dataset or exports.
-    display_data = filtered_data.to_crs("EPSG:4326").copy()
-    display_data["geometry"] = display_data.geometry.simplify(
-        tolerance=convert_m_4326deg(tolerance, 45), preserve_topology=True,
-    )
+    # Display geometry comes from the pre-computed levels; the shared dataset and exports are never changed.
+    display_data = fx_display_frame(filtered_data, tolerance)
     watershed_polygon = results["watershed_polygon"]
-    combined_geojson = {
-        "fires": json.loads(display_data.to_json()),
-        "user_point": json.loads(results["user_point"].to_json()) if results["user_point"] is not None else None,
-        "user_buffer": json.loads(results["buffer_geom"].to_json()) if results["buffer_geom"] is not None else None,
-        "watershed_polygon": json.loads(gpd.GeoSeries(
+    # Each part is serialized exactly once and joined as text; the old code parsed and re-encoded it three times.
+    parts = {
+        "fires": display_data.to_json(),
+        "user_point": results["user_point"].to_json() if results["user_point"] is not None else "null",
+        "user_buffer": results["buffer_geom"].to_json() if results["buffer_geom"] is not None else "null",
+        "watershed_polygon": gpd.GeoSeries(
             [watershed_polygon], crs=gdf_watershed_data.crs,
-        ).to_crs("EPSG:4326").to_json()) if watershed_polygon is not None else None,
+        ).to_crs("EPSG:4326").to_json() if watershed_polygon is not None else "null",
     }
-    size = len(json.dumps(combined_geojson).encode("utf-8"))
+    body = ("{" + ",".join(f'"{key}":{value}' for key, value in parts.items()) + "}").encode("utf-8")
+    size = len(body)
     if size > MAX_SIZE_MB * 1024 * 1024:
         return jsonify(error=f"Data too large to load ({size / 1024 / 1024:.2f} MB). Narrow your filters or increase display tolerance."), 413
-    return jsonify(combined_geojson)
+    return Response(body, mimetype="application/json")
+    # ==== [END EFFICIENCY UPDATE] ====
 
 
 @app.route('/')

@@ -21,9 +21,16 @@ else
   exit 1
 fi
 
-# Install/update dependencies
-python -m pip install --quiet --upgrade pip
-python -m pip install --quiet -r requirements.txt
+# ==== [EFFICIENCY UPDATE] install dependencies only when requirements.txt changes ====
+# Previously pip upgraded itself and re-checked every requirement on every launch.
+REQ_HASH=$(python -c "import hashlib; print(hashlib.sha256(open('requirements.txt', 'rb').read()).hexdigest())")
+STAMP_FILE="venv/.requirements.sha256"
+if [ ! -f "$STAMP_FILE" ] || [ "$(cat "$STAMP_FILE")" != "$REQ_HASH" ]; then
+  echo "Installing dependencies..."
+  python -m pip install --quiet --upgrade pip
+  python -m pip install --quiet -r requirements.txt && echo "$REQ_HASH" > "$STAMP_FILE"
+fi
+# ==== [END EFFICIENCY UPDATE] ====
 
 # Run the app
 echo "Starting app..."
