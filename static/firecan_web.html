@@ -1,610 +1,110 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FIRECAN</title>
-    <link rel="stylesheet" href="./static/leaflet.css">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <link rel="stylesheet" href="./static/firecan_style.css">
-    
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=filter_arrow_right" />
-    
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bungee+Tint&family=Cinzel:wght@400..900&family=Zalando+Sans:ital,wght@0,200..900;1,200..900&display=swap" rel="stylesheet">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#231816">
+  <title>FIRECAN · Historical fire explorer</title>
+  <link rel="stylesheet" href="/static/leaflet.css">
+  <link rel="stylesheet" href="/static/firecan_style.css">
+  <script defer src="/static/leaflet.js"></script>
+  <script defer src="/static/firecan_logic.js"></script>
 </head>
 <body>
-    <div class="container-fluid vh-100">
-
-        <div class="row h-100">
-
-            <div id="mainSidebarContent" class="col-12 col-md-1 p-3" style="display: flex; flex-direction: column;">
-                <button id="mapButton" class="btn mb-2"></button>
-                <button id="aboutButton" class="btn mb-2"></button>
-
+  <main id="map" aria-label="Map of historical fires in Canada" aria-busy="true"></main>
+  <div id="mapStartup" class="map-startup" role="status"><span class="spinner" aria-hidden="true"></span>Loading map…</div>
+  <div class="explorer">
+    <header class="toolbar">
+      <a class="brand" href="/" aria-label="FIRECAN home"><span class="brand-mark" aria-hidden="true">◈</span> FIRECAN</a>
+      <nav aria-label="Explorer controls">
+        <button id="filterToggle" type="button" aria-controls="filterPanel" aria-expanded="true">Filters</button>
+        <button id="aboutButton" type="button">About</button>
+      </nav>
+    </header>
+    <section id="filterPanel" class="panel" aria-label="Fire filters">
+      <div class="panel-heading"><div><p class="eyebrow">CANADA / FIRE HISTORY</p><h1>Explore the record</h1></div><button id="collapseFilters" class="icon-button" type="button" aria-label="Collapse filters">−</button></div>
+      <form id="filterForm">
+        <div class="filter-fields">
+          <fieldset>
+            <legend>Province or territory</legend>
+            <div id="provincecheckboxes" class="province-grid">
+              <label class="province-choice all-choice"><input type="checkbox" id="ALLcheckbox" value="ALL" checked><span>All provinces</span></label>
+              <label class="province-choice"><input type="checkbox" value="BC"><span>BC</span></label>
+              <label class="province-choice"><input type="checkbox" value="AB"><span>AB</span></label>
+              <label class="province-choice"><input type="checkbox" value="SK"><span>SK</span></label>
+              <label class="province-choice"><input type="checkbox" value="MB"><span>MB</span></label>
+              <label class="province-choice"><input type="checkbox" value="ON"><span>ON</span></label>
+              <label class="province-choice"><input type="checkbox" value="QC"><span>QC</span></label>
+              <label class="province-choice"><input type="checkbox" value="NB"><span>NB</span></label>
+              <label class="province-choice"><input type="checkbox" value="NS"><span>NS</span></label>
+              <label class="province-choice"><input type="checkbox" value="PE"><span>PE</span></label>
+              <label class="province-choice"><input type="checkbox" value="NL"><span>NL</span></label>
+              <label class="province-choice"><input type="checkbox" value="YT"><span>YT</span></label>
+              <label class="province-choice"><input type="checkbox" value="NT"><span>NT</span></label>
+              <label class="province-choice"><input type="checkbox" value="NU"><span>NU</span></label>
             </div>
-
-            <div id="mapSection" class="col-12 col-md-1 p-3" style="display:none;">
-
-                <button id="mapBackButton" class="btn btn-secondary mb-3"></button>
-                
-                <div id = "gofiler">
-                    <div class="d-flex gap-2">
-                        <button id="saveButton" type="button" class="flex-fill"></button>
-                        <button id="filterButton" type="button" class="flex-fill" onclick="loadFilteredData()">Filter Map</button>
-                    </div>
-
-                    <div class="d-grid gap-1 mb-3">
-                        <span id="clearFiltersText" onclick="clearFilters()">Clear Filters</span>
-                    </div>
-
-                    <div id="loadingMessage" class="alert alert-info text-center fw-bold py-2" style="display:none;">          
-                        <div class="spinner-border text-primary" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                        <p class="mt-2">Loading data<br>This may take several minutes...</p>
-                    </div>  
-
-                    <div id="foundMessage" class="alert alert-info text-center fw-bold py-2" style="display:none;">          
-                        <p class="mt-2"></p>
-                    </div>         
-                </div>
-                <hr class="sidebar-separator">
-
-                <form onsubmit="return false;">  
-                    <div id = "provincecheckboxes">
-                        <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="checkbox" id="QCcheckbox" value="QC">
-                            <label class="form-check-label" for="checkbox1">QC</label>
-                        </div>
-
-                        <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="checkbox" id="ONcheckbox" value="ON">
-                            <label class="form-check-label" for="checkbox2">ON</label>
-                        </div>
-
-                        <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="checkbox" id="BCcheckbox" value="BC">
-                            <label class="form-check-label" for="checkbox2">BC</label>
-                        </div>
-
-                        <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="checkbox" id="ABcheckbox" value="AB">
-                            <label class="form-check-label" for="checkbox2">AB</label>
-                        </div>
-
-                        <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="checkbox" id="SKcheckbox" value="SK">
-                            <label class="form-check-label" for="checkbox2">SK</label>
-                        </div>
-
-                        <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="checkbox" id="MBcheckbox" value="MB">
-                            <label class="form-check-label" for="checkbox2">MB</label>
-                        </div>
-
-                        <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="checkbox" id="YTcheckbox" value="YT">
-                            <label class="form-check-label" for="checkbox2">YT</label>
-                        </div>
-
-                        <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="checkbox" id="NTcheckbox" value="NT">
-                            <label class="form-check-label" for="checkbox2">NT</label>
-                        </div>
-
-                        <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="checkbox" id="NScheckbox" value="NS">
-                            <label class="form-check-label" for="checkbox2">NS</label>
-                        </div>
-                        <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="checkbox" id="NLcheckbox" value="NL">
-                            <label class="form-check-label" for="checkbox2">NL</label>
-                        </div>
-                        <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="checkbox" id="NBcheckbox" value="NB">
-                            <label class="form-check-label" for="checkbox2">NB</label>
-                        </div>
-
-
-                        <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="checkbox" id="ALLcheckbox" value="ALL" checked>
-                            <label class="form-check-label" for="checkbox2">All</label>
-                        </div> 
-
-
-                    </div>
-                    <hr class="sidebar-separator">
-                    <div id="yearfilterinputs">
-                        <label for="minYear" class="year-label">Year</label>
-                        <div class="year-inputs" style="display: flex; gap: 1rem;">
-                            <input type="text" id="minYear" class="form-control" placeholder="Min Year">
-                            <input type="text" id="maxYear" class="form-control" placeholder="Max Year">
-                        </div>
-                    </div>
-                    <hr class="sidebar-separator">
-                    <div id="sizefilterinputs">
-                        <label for="minSize" class="size-label">Size (HA)</label>
-                        <div class="size-inputs" style="display: flex; gap: 1rem;">
-                            <input type="text" id="minSize" class="form-control" placeholder="Min Size">
-                            <input type="text" id="maxSize" class="form-control" placeholder="Max Size">
-                        </div>
-                    </div>
-                    <hr class="sidebar-separator">
-                    <div id="locationfilterinputs">
-                        <label for="distanceCoords" class="location-label">Location</label>
-                        <div class="location-inputs" style="display: flex; gap: 1rem;">
-                            <input type="text" id="distanceCoords" class="form-control" placeholder="Coords">
-                            <input type="text" id="distanceRadius" class="form-control" placeholder="Radius (km)">
-                        </div>
-                    </div>
-                <hr class="sidebar-separator">
-                    <div id="watershedfilterinput" class="mb-3">
-                        <label for="watershedName" class="filter-label">Watershed</label>
-                        <input type="text" id="watershedName" class="form-control" placeholder="eg. YAMASKA">
-                    </div>
-                <hr class="sidebar-separator">
-                <div class="d-flex justify-content-between gap-1">
-                    <button id="watershedExplorerButton" type="button" class="btn mb-2"><svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#FFFFFF"><path d="M491-200q12-1 20.5-9.5T520-230q0-14-9-22.5t-23-7.5q-41 3-87-22.5T343-375q-2-11-10.5-18t-19.5-7q-14 0-23 10.5t-6 24.5q17 91 80 130t127 35ZM480-80q-137 0-228.5-94T160-408q0-100 79.5-217.5T480-880q161 137 240.5 254.5T800-408q0 140-91.5 234T480-80Zm0-80q104 0 172-70.5T720-408q0-73-60.5-165T480-774Q361-665 300.5-573T240-408q0 107 68 177.5T480-160Zm0-320Z"/></svg></button>
-                    <button id="polygonTolButton" type="button" class="btn mb-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#ffffff">
-                            <path d="M272-120 64-480l208-360h416l208 360-208 360H272Zm46-80h324l161-280-161-280H318L156-480l162 280Zm162-280Z"/>
-                        </svg>
-                    </button>
-                </div>
-                </form>
-            </div>
-            
-
-            <div id="aboutSection" class="col-12 col-md-1 p-3" style="display:none;">
-                <button id="aboutBackButton" class="btn btn-secondary mb-3"></button>
-                <h1>About FIRECAN</h1>
-
-                <p><strong>Firecan</strong> is a collection of historical forest fires data in Canada<br>
-                    The data used by Firecan can be publicly accesed (links below)<br>
-                    I strongly suggest looking at the raw data for more information<br>
-                    Download and run FIRECAN locally: <a href="https://github.com/thomascheung05/firecan_repo" target="_blank">GITHUB</a></li>
-
-                <p>
-                    <strong style="font-size: 24px;">Filter Data</strong><br>
-                    To display polygons, first click the map on the side bar<br>
-                    Input your desired filters and click "Filter Map" to display polygons<br>
-                    Due to server limitations, requests are limited to 8mb<br>
-                    Either focus your filters or reduce polygon tolerance to reduce file size
-                    <br>
-                    <br>
-                    <strong style="font-size: 24px;">Base Maps</strong><br>
-                    Change the BaseMaps using the pop-up in the top right of the map.<br>
-                    Different BaseMaps have different styles for the Location and Watershed Filtering,<br>
-                    Make Sure to re-FilterMap to update the symbology
-                    <br>
-                    <br>
-                    <strong style="font-size: 24px;">Polygon Tolerance</strong><br>
-                    Polygons are drawn uses lists of coordiantes<br>
-                    To reduce load we can decrease the amounts of coordiantes used for each polgyon<br>
-                    In the filtering side bar click the <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#ffffff"><path d="M272-120 64-480l208-360h416l208 360-208 360H272Zm46-80h324l161-280-161-280H318L156-480l162 280Zm162-280Z"/></svg> button <br> 
-                    Enter a lower number to draw a more detailed polygon <br>
-                    This number refers to allowed deviation when reducing the polygon
-
-                    <br>
-                    <br>
-
-                    <strong style="font-size: 24px;">Watershed Explorer</strong><br>
-                    Currently, firecan only supports watershed filtering in Quebec<br>
-                    To filter by watershed, first click on the watershed explorer <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#FFFFFF"><path d="M491-200q12-1 20.5-9.5T520-230q0-14-9-22.5t-23-7.5q-41 3-87-22.5T343-375q-2-11-10.5-18t-19.5-7q-14 0-23 10.5t-6 24.5q17 91 80 130t127 35ZM480-80q-137 0-228.5-94T160-408q0-100 79.5-217.5T480-880q161 137 240.5 254.5T800-408q0 140-91.5 234T480-80Zm0-80q104 0 172-70.5T720-408q0-73-60.5-165T480-774Q361-665 300.5-573T240-408q0 107 68 177.5T480-160Zm0-320Z"/></svg><br>
-                    Choose your desired watershed, copy the name and past it into the watershed input box<br>
-                    Filting based on location in other polgyons takes a big longer than normal filtering
-
-                    <br>
-                    <br>
-
-                    <strong style="font-size: 24px;">Download Data</strong><br>
-                    Donwload your filtered data by entering your desired filters are pressing the save button<br>
-                    Select your file format and press save
-
-                    <br>
-                    <br>
-
-                </p>
-
-                <p><strong>Data Sources:</strong></p>
-                <ul>
-                    <li>Quebec Fires: <a href="https://www.donneesquebec.ca/recherche/dataset/feux-de-foret" target="_blank">https://www.donneesquebec.ca/recherche/dataset/feux-de-foret</a></li>
-                    <li>Watersheds: <a href="https://hub.arcgis.com/maps/12b6e33d5a754c92b97ae5d0fed6940a/about" target="_blank">https://hub.arcgis.com/maps/12b6e33d5a754c92b97ae5d0fed6940a/about</a></li>
-                    <li>All other Provinces: <a href="https://cwfis.cfs.nrcan.gc.ca/datamart" target="_blank">https://cwfis.cfs.nrcan.gc.ca/datamart</a></li>
-                </ul>
-[Esri Canada Education and Research](https://hub.arcgis.com/maps/12b6e33d5a754c92b97ae5d0fed6940a/about)
-            </div>
-
-            <div class="col p-0" id="map" style="height: 100vh; min-height: 400px;"></div>
-
+          </fieldset>
+          <fieldset>
+            <legend>Year</legend>
+            <div class="field-pair"><label for="minYear">From<input id="minYear" type="number" min="0" step="1" placeholder="Any year"></label><label for="maxYear">To<input id="maxYear" type="number" min="0" step="1" placeholder="Any year"></label></div>
+          </fieldset>
+          <fieldset>
+            <legend>Fire size <span class="unit">ha</span></legend>
+            <div class="field-pair"><label for="minSize">Minimum<input id="minSize" type="number" min="0" step="any" placeholder="No minimum"></label><label for="maxSize">Maximum<input id="maxSize" type="number" min="0" step="any" placeholder="No maximum"></label></div>
+          </fieldset>
+          <fieldset>
+            <legend>Near a location</legend>
+            <label for="distanceCoords">Latitude, longitude<input id="distanceCoords" type="text" placeholder="45.50, -73.57" aria-describedby="locationHelp"></label>
+            <div class="location-row"><label for="distanceRadius">Radius <span class="unit">km</span><input id="distanceRadius" type="number" min="0.001" step="any" placeholder="e.g. 25"></label><p id="locationHelp" class="hint">Click the map to see coordinates.</p></div>
+          </fieldset>
+          <fieldset>
+            <legend>Your boundary <span class="boundary-dot" aria-hidden="true"></span></legend>
+            <label for="polygonFile" class="upload-label">Upload GeoJSON</label>
+            <input id="polygonFile" type="file" accept=".geojson,.json,application/geo+json,application/json" aria-describedby="polygonHelp polygonStatus">
+            <p id="polygonHelp" class="hint">Polygon or MultiPolygon · up to 10 MB<br>Includes fires that overlap or touch the boundary.</p>
+            <div class="boundary-summary"><p id="polygonStatus" class="hint" role="status">No boundary selected.</p><button id="removePolygon" type="button" class="text-button" hidden>Remove</button></div>
+          </fieldset>
+          <fieldset>
+            <legend>Quebec watershed</legend>
+            <label for="watershedName">Watershed name<input id="watershedName" type="text" placeholder="e.g. YAMASKA"></label>
+            <button id="watershedExplorerButton" type="button" class="secondary wide">Browse watersheds</button>
+          </fieldset>
+          <details class="display-options"><summary>Display detail</summary><label for="polygonTol">Simplification tolerance <span class="unit">m</span><input id="polygonTol" type="number" min="0" step="any" value="50"></label><p class="hint">Lower values show more detail. Exports keep the original geometry.</p></details>
         </div>
-
-        <div id="introModal" >
-            <div class="modal-content">
-                <div class="mb-2">
-                <h2 class = "bungee-tint-regular-introModal" id = "introTitle">FIRECAN</h2>
-                <p id = "introText">- <strong>Firecan</strong> displays historical forest fires data in Canada<br>
-                - Use the sidebar and the <strong>Filter Map</strong> button to display polygons<br>
-                - Click on the <strong><svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#FFFFFF"><path d="M491-200q12-1 20.5-9.5T520-230q0-14-9-22.5t-23-7.5q-41 3-87-22.5T343-375q-2-11-10.5-18t-19.5-7q-14 0-23 10.5t-6 24.5q17 91 80 130t127 35ZM480-80q-137 0-228.5-94T160-408q0-100 79.5-217.5T480-880q161 137 240.5 254.5T800-408q0 140-91.5 234T480-80Zm0-80q104 0 172-70.5T720-408q0-73-60.5-165T480-774Q361-665 300.5-573T240-408q0 107 68 177.5T480-160Zm0-320Z"/></svg></strong> button to see all available watersheds<br>
-                - Click on the  <strong><svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#FFFFFF"><path d="M272-120 64-480l208-360h416l208 360-208 360H272Zm46-80h324l161-280-161-280H318L156-480l162 280Zm162-280Z"/></svg></strong> to make polygons more detailed</p>
-                </div>
-            </div>
-        </div>
-
-        <div id="downloadModal" style="display: none;">
-            <div class="modal-content">
-                <span class="close" id="closeDownloadModal">&times;</span>
-                <h5>Download Data</h5>
-
-                <div class="mb-2">
-                    <label for="downloadFormat" class="form-label">Download Format</label>
-                    <select id="downloadFormat" class="form-select">
-                        <option value="csv" selected>CSV</option>
-                        <option value="json">GeoJSON</option>
-                        <option value="gpkg">GPKG (GeoPackage)</option>
-                    </select>
-                </div>
-
-                <div class="d-grid mt-3">
-                    <button id="downloadButton" class="btn btn-primary" type="button">Download Data</button>
-                </div>
-
-                <div id="downloadingMessage" class="alert alert-info text-center fw-bold py-2 mt-3" style="display:none;">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                    <p class="mt-2">Loading data<br>This may take several minutes...</p>
-                </div>
-
-                <div id="downloadingfoundMessage" class="alert alert-info text-center fw-bold py-2 mt-2" style="display:none;">          
-                    <p class="mt-2"></p>
-                </div>
-            </div>
-        </div>
-
-        <div id="watershedModal" class="modal">
-            <span class="close">&times;</span>
-            <div id="watershedMap"></div>
-            <div id="spinner" class="spinner-border text-primary position-absolute top-50 start-50 translate-middle" role="status" hidden>
-                <span class="visually-hidden">Loading...</span>
-              </div>
-        </div>
-
-        <div id="polygonTolModal">
-            <div class="modal-content">
-                <span class="close">&times;</span>
-                <div class="mb-2">
-                    <label for="polygonTol" class="form-label">Polygon Tolerance (m)</label>
-                    <input type="text" id="polygonTol" class="form-control" placeholder="100">
-                </div>
-                <div class="d-grid mt-3">
-                    <button id="savePolygonTol" class="btn btn-primary">Save and Re-Filter
-                    </button>
-                </div>
-            </div>
-        </div>
-
-    </div>
-    <script src="./static/leaflet.js"></script>
-    <script src="./static/firecan_logic.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-
-    <!-- Download modal -->
-    <script>
-    const saveButton = document.getElementById("saveButton");
-    const downloadModal = document.getElementById("downloadModal");
-    const closeDownloadModal = document.getElementById("closeDownloadModal");
-
-    saveButton.addEventListener("click", () => {
-        downloadModal.style.display = "flex";
-    });
-
-    closeDownloadModal.addEventListener("click", () => {
-        downloadModal.style.display = "none";
-    });
-
-     
-    downloadModal.addEventListener("click", (e) => {
-        if (e.target === downloadModal) {
-            downloadModal.style.display = "none";
-        }
-    });
-
-     
-    document.getElementById("downloadButton").addEventListener("click", downloadFilteredData);
-    </script>
-    <!-- Main Side Bar Button Clicks -->
-    <script>
-        const mapBackButton = document.getElementById("mapBackButton");
-        const aboutBackButton = document.getElementById("aboutBackButton");
-        const mainSidebarContent = document.getElementById("mainSidebarContent");
-
-        const aboutButton = document.getElementById("aboutButton");
-        const aboutSection = document.getElementById("aboutSection");
-
-        const mapButton = document.getElementById("mapButton");
-        const mapSection = document.getElementById("mapSection");  
-
-         
-        function openSection(section) {
-            mainSidebarContent.style.display = "none";
-            section.style.display = "block";
-        }
-
-         
-        function goBack() {
-            aboutSection.style.display = "none";
-            mapSection.style.display = "none";
-            mainSidebarContent.style.display = "block";
-        }
-
-        mapBackButton.addEventListener("click", goBack);
-        aboutBackButton.addEventListener("click", goBack);
-        aboutButton.addEventListener("click", () => openSection(aboutSection));
-        mapButton.addEventListener("click", () => openSection(mapSection));
-        backButton.addEventListener("click", goBack);
-    </script>
-    <!-- Intro Modal -->
-    <script>
-        const introModal = document.getElementById("introModal");
-        window.addEventListener("load", () => {
-            introModal.style.display = "flex";
-        });
-        introModal.addEventListener("click", (e) => {
-            if (e.target === introModal) {
-                introModal.style.display = "none";
-            }
-        });
-    </script>
-    <!-- Polygon Tolerance -->
-     <script>
-        const polygonTolButton = document.getElementById("polygonTolButton");
-        const polygonTolModal = document.getElementById("polygonTolModal");
-        const polygonCloseBtn = polygonTolModal.querySelector(".close");
-        let savedPolygonTolerance = 50;
-        const polygonInput = document.getElementById("polygonTol");
-        const savePolygonTol = document.getElementById("savePolygonTol");
-
-        
-        polygonTolButton.addEventListener("click", () => {
-            polygonTolModal.style.display = "flex";
-            
-            if (savedPolygonTolerance !== null) {
-                polygonInput.value = savedPolygonTolerance;
-            }
-        });
-
-        
-        polygonCloseBtn.addEventListener("click", () => {
-            polygonTolModal.style.display = "none";
-        });
-
-        polygonTolModal.addEventListener("click", (e) => {
-            if (e.target === polygonTolModal) {
-                polygonTolModal.style.display = "none";
-            }
-        });
-
-        
-        savePolygonTol.addEventListener("click", () => {
-            const tolValue = polygonInput.value.trim();
-            if (!tolValue || isNaN(tolValue)) {
-                alert("Please enter a valid number for polygon tolerance.");
-                return;
-            }
-            savedPolygonTolerance = parseFloat(tolValue);
-            polygonTolModal.style.display = "none";
-            console.log("Saved polygon tolerance:", savedPolygonTolerance);
-            loadFilteredData()
-        });
-
-        polygonTolModal.addEventListener("click", (e) => {
-            if (e.target === polygonTolModal) {
-                polygonTolModal.style.display = "none";
-            }
-        });
-     </script>    
-    <!-- Watershed Explorer -->
-    <script>
-        const watershedButton = document.getElementById("watershedExplorerButton");
-        const modal = document.getElementById("watershedModal");
-        const closeBtn = modal.querySelector(".close");
-
-        let watershedMap = null;
-        let watershedLayer = null;
-        let watershedData = null;
-
-
-        function showMap(){
-            if (!watershedMap) {
-                
-                watershedMap = L.map('watershedMap').setView([52.520878, -69.855725], 5);  
-
-                
-                Esrimap = L.tileLayer(
-                'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-                { maxZoom: 18, attribution: 'Tiles © Esri' }
-                ).addTo(watershedMap);
-
-                
-            if (watershedData) {
-            watershedLayer = L.geoJSON(watershedData, {
-                style: function(feature) {                                                                               // THis styles the polygons that are displayed on the map 
-                    return {
-                        color: "#031cfc",
-                        weight: 1,                                                                                       // Big weight to make the polygons visible from zoomed out 
-                        opacity: 1,
-                        fillColor: "#aedffd",
-                        fillOpacity: 0.5                                                                                 // Lower opacity looks better, and helps distinguish from polygon fill and border on map (useful when many polygons are next to each other)
-                    };
-                },
-                onEachFeature: function(feature, layer) {                                                               // This creates a pop up when clicking on polygons that say the year and its size, this was half taken from Ottowa demo and half AI.
-                    if (feature.properties) {                   
-                        let popupContent = `
-                            <b>Watershed Details</b><br>
-                            Watershed: ${feature.properties.watershed_name}<br>
-                        `;
-                        layer.bindPopup(popupContent);
-                    }
-                },
-            }).addTo(watershedMap);
-
-
-            watershedMap.fitBounds(watershedLayer.getBounds());
-            } else {
-            console.warn("Watershed data not ready yet.");
-            }
-            } else {
-                watershedMap.invalidateSize(); 
-            }
-        }
-        watershedButton.addEventListener("click", () => {
-            modal.style.display = "block";
-            if (!watershedData) {
-                spinner.hidden = false;
-                fetch("/static/watershed_data.geojson")  
-                    .then(res => res.json())
-                    .then(data => {
-                        watershedData = data;  
-                        showMap();
-                })
-                .catch(err => console.error("Failed to load watershed data", err))
-                .finally(() => {
-                    spinner.hidden = true;
-                });
-            }
-            else{
-                showMap();
-            }
-        });
-        closeBtn.addEventListener("click", () => {
-            modal.style.display = "none";
-        });
-        modal.addEventListener("click", (e) => {
-            if (e.target === modal) {
-                modal.style.display = "none";
-            }
-        });
-    </script>
-    <!-- Map Coordinates on Click -->
-    <script>
-        map.on('click', function(e) {
-        const lat = e.latlng.lat.toFixed(6);
-        const lon = e.latlng.lng.toFixed(6); 
-        L.popup()
-            .setLatLng(e.latlng)
-            .setContent(`${lat}, ${lon}`)
-            .openOn(map);
-        });
-    </script>
-    <!-- Clear Filters -->
-    <script>
-        function clearFilters() {
-           
-            const checkboxes = document.querySelectorAll("#provincecheckboxes input[type='checkbox']");
-            checkboxes.forEach(checkbox => checkbox.checked = false);
-
-             
-            const inputs = document.querySelectorAll("#mapSection input[type='text']");
-            inputs.forEach(input => input.value = "");
-
-             
-            const downloadFormat = document.getElementById("downloadFormat");
-            if (downloadFormat) downloadFormat.value = "csv";
-
-             
-            if (typeof savedPolygonTolerance !== 'undefined' && polygonInput) {
-                polygonInput.value = savedPolygonTolerance;
-            }
-
-            console.log("Filters cleared.");
-        }
-    </script>
-    <!-- Can't select "all" + a province -->
-    <script>
-        const container = document.getElementById('provincecheckboxes');
-        const allBox = document.getElementById('ALLcheckbox');
-        const provinceBoxes = container.querySelectorAll('input[type="checkbox"]:not(#ALLcheckbox)');
-
-        container.addEventListener('change', (e) => {
-            if (e.target === allBox) {
-            // Ticking "All" clears every province
-            if (allBox.checked) provinceBoxes.forEach(cb => cb.checked = false);
-            } else if (e.target.checked) {
-            // Ticking any province clears "All"
-            allBox.checked = false;
-            }
-
-            // If nothing is ticked, fall back to "All"
-            const anyProvince = [...provinceBoxes].some(cb => cb.checked);
-            if (!anyProvince) allBox.checked = true;
-        });
-    </script>
+        <footer class="panel-footer">
+          <div class="action-row"><button id="filterButton" class="primary" type="submit">Filter Map</button><button id="saveButton" type="button" class="secondary">Export</button></div>
+          <div class="status-row"><span id="foundMessage" role="status" aria-live="polite">Set filters to explore fires.</span><button id="clearFilters" type="button" class="text-button">Reset</button></div>
+          <p id="loadingMessage" class="loading" role="status" hidden><span class="spinner" aria-hidden="true"></span><span id="loadingText">Loading fires…</span></p>
+          <p id="errorMessage" class="error" role="alert" hidden></p>
+        </footer>
+      </form>
+    </section>
+  </div>
+  <dialog id="aboutDialog" aria-labelledby="aboutTitle">
+    <div class="dialog-heading"><h2 id="aboutTitle">A record of Canada's fires</h2><button type="button" class="icon-button" data-close aria-label="Close About">×</button></div>
+    <p>FIRECAN explores historical forest fire perimeters across Canada. Select filters, then choose <strong>Filter Map</strong>. Click a fire for its year, area, and data source.</p>
+    <p>Upload a longitude/latitude GeoJSON boundary to include fires that overlap or touch it. Multiple polygon features act as one search area. Other active filters narrow the selection further; watershed filtering includes fully contained fires.</p>
+    <p>Exports use the current filter settings and retain complete fire boundaries. Lower display tolerance shows more detail; increase it or narrow your filters if map results exceed the 100 MB display limit.</p>
+    <p class="hint">Historical records vary in coverage and completeness. Consult the source datasets for their details.</p>
+    <h3>Data sources</h3>
+    <ul class="source-list">
+      <li><a href="https://www.donneesquebec.ca/recherche/dataset/feux-de-foret" target="_blank" rel="noopener noreferrer">Données Québec · Quebec fires</a></li>
+      <li><a href="https://cwfis.cfs.nrcan.gc.ca/datamart" target="_blank" rel="noopener noreferrer">CWFIS · Canadian fire records</a></li>
+      <li><a href="https://hub.arcgis.com/maps/12b6e33d5a754c92b97ae5d0fed6940a/about" target="_blank" rel="noopener noreferrer">Esri Canada · Quebec watersheds</a></li>
+    </ul>
+  </dialog>
+  <dialog id="downloadDialog" aria-labelledby="downloadTitle">
+    <div class="dialog-heading"><h2 id="downloadTitle">Export fires</h2><button type="button" class="icon-button" data-close aria-label="Close export">×</button></div>
+    <p class="hint">Uses your current filters, including the uploaded boundary.</p>
+    <label for="downloadFormat">File format<select id="downloadFormat"><option value="csv">CSV · attributes</option><option value="json">GeoJSON · full geometry</option><option value="gpkg">GeoPackage · full geometry</option></select></label>
+    <button id="downloadButton" type="button" class="primary wide">Download data</button>
+    <p id="downloadStatus" role="status" class="hint"></p>
+    <p id="downloadError" role="alert" class="error" hidden></p>
+  </dialog>
+  <dialog id="watershedDialog" class="watershed-dialog" aria-labelledby="watershedTitle">
+    <div class="dialog-heading"><div><h2 id="watershedTitle">Quebec watersheds</h2><p class="hint">Click a watershed and choose Use watershed.</p></div><button type="button" class="icon-button" data-close aria-label="Close watershed explorer">×</button></div>
+    <p id="watershedStatus" role="status" class="hint"></p>
+    <div id="watershedMap" aria-label="Quebec watershed map"></div>
+  </dialog>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-    <!-- Sidebar Resizer -->
-    <!-- <script>
-const resizer = document.getElementById("resizer");
-const sidebar = document.getElementById("sidebar");
-
-// Minimum and maximum width of the sidebar
-const MIN_WIDTH = 50;
-const MAX_WIDTH = 600;
-
-let startX = 0;
-let startWidth = 0;
-let isResizing = false;
-
-// Start resizing
-resizer.addEventListener("mousedown", (e) => {
-    isResizing = true;
-    startX = e.clientX;
-    startWidth = sidebar.offsetWidth;
-
-    // Add listeners to document for dragging
-    document.addEventListener("mousemove", onMouseMove);
-    document.addEventListener("mouseup", onMouseUp);
-
-    // Prevent text selection while dragging
-    document.body.style.userSelect = 'none';
-});
-
-// Function to handle mouse move
-function onMouseMove(e) {
-    if (!isResizing) return;
-
-    const dx = e.clientX - startX;
-    let newWidth = startWidth + dx;
-
-    // Clamp the width between min and max
-    newWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, newWidth));
-
-    sidebar.style.width = `${newWidth}px`;
-}
-
-// Stop resizing
-function onMouseUp() {
-    isResizing = false;
-
-    // Remove event listeners
-    document.removeEventListener("mousemove", onMouseMove);
-    document.removeEventListener("mouseup", onMouseUp);
-
-    // Restore text selection
-    document.body.style.userSelect = '';
-}
-
-    </script> -->

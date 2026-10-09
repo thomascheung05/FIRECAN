@@ -7,13 +7,8 @@ from flask import send_file   # type: ignore
 import io
 from pathlib import Path
 import pandas as pd
-from shapely.geometry import Point
-import numpy as np
-import requests
-import json
-import geopandas as gpd
-from pathlib import Path
-from datetime import datetime
+from shapely.geometry import Point, shape
+from shapely.ops import unary_union
 import math
 import shutil
 
@@ -223,99 +218,160 @@ def fx_merge_provincial_fires(data1, data2):
 
 
 
-def fx_filter_fires_data(                                                                             # This is the function that actually filters the data, it takes in fire data (and watershed but removed it cause brocken for now), as well as user inputs for filtering 
-    fire_gdf,      
-    watershed_data, 
-    provincelist,                                                                                                                                                                   # Nore sure if i already mentioned this but i used AI to help apply all the filters at once / apply only the ones the user inputed
-    min_year,
-    max_year,
-    min_size,
-    max_size,
-    distance_coords,
-    distance_radius,
-    watershed_name
-    ):
-    #################### ######################################## ######################################## ######################################## ####################
-    # Filters data set by storing conditions in list and then applyign them all at once, returning all the polygons necessary depending on the fitlers used
-    #################### ######################################## ######################################## ######################################## ####################
-    if "ALL" in provincelist:
-        filtered_gdf = fire_gdf
-    else:
-        filtered_gdf = fire_gdf[fire_gdf['province'].isin(provincelist)]
-    
-    conditions = []     # List of filtering conditions 
-    
-    if min_year  != '' or max_year  != '':                                                           # This IFs for all of these check if the filtering box on the site has a value inputed in it for this one and the next one we use OR becuase wse want the use to be able to input only a max or a min and not HAVE to input both 
-        if min_year  != '':
-            min_year = int(min_year)
-        else:                                                                                               # If this field was empty (and the other was not as the IF is running) then we assing the min year to 0, if we dont do this it tryus to convert NULL to an int
-            min_year = 0
-        if max_year  != '':
-            max_year= int(max_year)
-        else:
-            max_year = 100000
-        conditions.append((filtered_gdf['fire_year'] >= min_year) & (filtered_gdf['fire_year'] <= max_year))      # This appends the condition to the filtering list to be applied later 
-
-    if min_size  != '' or max_size  != '':
-        if min_size  != '':
-            min_size = float(min_size)
-        else:
-            min_size = 0.0
-        if max_size  != '':
-            max_size= float(max_size)
-        else:
-            max_size = 100000.0
-        print('here')
-        conditions.append((filtered_gdf['fire_size'] >= min_size) & (filtered_gdf['fire_size'] <= max_size))
-
-    if distance_coords  != '' and distance_radius  != '':                                                     # The is the distance radius filtering that only selects fires within a radius of a point 
-            lat, lon = map(float, distance_coords.split(','))       
-            distance_radius = float(distance_radius)
-            distance_radius = distance_radius*1000
-            user_point = gpd.GeoSeries([Point(lon, lat)], crs='EPSG:4326')                                    # This creates the point based ont he user inputed coords 
-            utm_crs = user_point.estimate_utm_crs()                             
-            user_point_m = user_point.to_crs(utm_crs)                                                             # This chanes the point to a projection that makes sense for its locatoin, we cannot have it in EPSG: 4326 becuase this projection cant measure distances in metres only in degrees 
-            buffer_m = user_point_m.buffer(distance_radius)                                                         # This creates a buffer around the point with a radius that the user inputed 
-            buffer_deg = buffer_m.to_crs('EPSG:4326')                                                             # Here we reproject the buffer back to EPSG:4326 so leaflet can display it
-            conditions.append(filtered_gdf.geometry.intersects(buffer_deg.iloc[0]))
-
-    if watershed_name  != '':  
-            selected_ws = watershed_data[watershed_data['watershed_name'] == watershed_name]
-            print(selected_ws)
-            if not selected_ws.empty:
-                print('Starting Watershed Filtering', timenow())
-                watershed_polygon = selected_ws.geometry.unary_union  
-                conditions.append(filtered_gdf.geometry.within(watershed_polygon))
-                print('Done Watershed Filtering', timenow())
-            else:
-                print(f'No watershed found with name "{watershed_name}". Filter will be ignored.')
+POLYGON_MAX_BYTES = 10 * 1024 * 1024
 
 
+def parse_polygon_geojson(document):
+    """Validate a WGS84 polygon upload and combine its features into one area."""
+    try:
+        encoded = json.dumps(document, allow_nan=False, ensure_ascii=False, separators=(",", ":"))
+        size = len(encoded.encode("utf-8"))
+        document = json.loads(encoded)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Boundary must contain valid JSON and finite coordinates.") from exc
+    if size > POLYGON_MAX_BYTES:
+        raise ValueError("Boundary must be 10 MB or smaller.")
+
+    geometries = []
+
+    def read_polygon(item):
+        if not isinstance(item, dict):
+            raise ValueError("Boundary must be a GeoJSON polygon, feature, or feature collection.")
+        crs = item.get("crs")
+        if crs is not None:
+            if not isinstance(crs, dict) or not isinstance(crs.get("properties"), dict):
+                raise ValueError("Boundary coordinates must use EPSG:4326 longitude/latitude.")
+            if crs["properties"].get("name") not in {
+                "EPSG:4326", "urn:ogc:def:crs:EPSG::4326",
+                "urn:ogc:def:crs:OGC:1.3:CRS84", "OGC:CRS84",
+            }:
+                raise ValueError("Boundary coordinates must use EPSG:4326 longitude/latitude.")
+        kind = item.get("type")
+        if kind == "FeatureCollection":
+            features = item.get("features")
+            if not isinstance(features, list) or not features:
+                raise ValueError("Boundary feature collection must not be empty.")
+            for feature in features:
+                if not isinstance(feature, dict) or feature.get("type") != "Feature":
+                    raise ValueError("Feature collections must contain polygon features.")
+                read_polygon(feature)
+            return
+        if kind == "Feature":
+            read_polygon(item.get("geometry"))
+            return
+        if kind not in {"Polygon", "MultiPolygon"}:
+            raise ValueError("Boundary must contain only Polygon or MultiPolygon geometries.")
+        coordinates = item.get("coordinates")
+        polygons = [coordinates] if kind == "Polygon" else coordinates
+        if not isinstance(polygons, list) or not polygons:
+            raise ValueError("Boundary geometry must not be empty.")
+        for rings in polygons:
+            if not isinstance(rings, list) or not rings:
+                raise ValueError("Each polygon must contain an outer ring.")
+            for ring in rings:
+                if not isinstance(ring, list) or len(ring) < 4 or ring[0] != ring[-1]:
+                    raise ValueError("Polygon rings must be closed and contain at least four positions.")
+                for position in ring:
+                    if not isinstance(position, list) or len(position) not in (2, 3):
+                        raise ValueError("Use longitude/latitude positions in the boundary.")
+                    if any(isinstance(n, bool) or not isinstance(n, (int, float)) or not math.isfinite(n) for n in position):
+                        raise ValueError("Boundary coordinates must be finite numbers.")
+                    if not (-180 <= position[0] <= 180 and -90 <= position[1] <= 90):
+                        raise ValueError("Boundary coordinates must use EPSG:4326 longitude/latitude.")
+        try:
+            geometry = shape(item)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Could not read the polygon geometry.") from exc
+        if geometry.is_empty or not geometry.is_valid:
+            raise ValueError("Boundary polygon is empty or invalid; check for crossing edges.")
+        geometries.append(geometry)
+
+    read_polygon(document)
+    return unary_union(geometries)
 
 
-    if conditions:
-        combined_mask = np.logical_and.reduce(conditions)                                                         # The combined filtered conditions
-        filtered_gdf = filtered_gdf[combined_mask]                                                                # Filtering the dataset and returning with the right fitlers 
-
-    results = {                                     # we have multiple things being returned depending on the filtering options used 
-            "filtered_gdf": filtered_gdf,
-            "user_point": None,
-            "buffer_geom": None,
-            "watershed_polygon": None
-        }
-
-    
-    if distance_coords != '' and distance_radius != '':
-        results["user_point"] = user_point
-        results["buffer_geom"] = buffer_deg
-
-    if watershed_name != '' and watershed_polygon is not None:
-        results["watershed_polygon"] = watershed_polygon
-
-    return results
+def filter_number(value, label, *, integer=False, minimum=0):
+    if value is None or value == "":
+        return None
+    try:
+        if isinstance(value, bool):
+            raise ValueError
+        number = float(value)
+        if not math.isfinite(number) or number < minimum or (integer and not number.is_integer()):
+            raise ValueError
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(f"{label} must be a finite {'whole ' if integer else ''}number of at least {minimum}.") from exc
+    return int(number) if integer else number
 
 
+def fx_filter_fires_data(
+    fire_gdf, watershed_data, provincelist,
+    min_year=None, max_year=None, min_size=None, max_size=None,
+    distance_coords=None, distance_radius=None, watershed_name=None,
+    polygon_geojson=None,
+):
+    """Apply all active filters to original fire geometries without modifying them."""
+    if not isinstance(provincelist, list) or any(not isinstance(p, str) for p in provincelist):
+        raise ValueError("Provinces must be a list of province codes.")
+    filtered_gdf = fire_gdf if "ALL" in provincelist else fire_gdf[fire_gdf["province"].isin(provincelist)]
+    min_year = filter_number(min_year, "Minimum year", integer=True)
+    max_year = filter_number(max_year, "Maximum year", integer=True)
+    min_size = filter_number(min_size, "Minimum size")
+    max_size = filter_number(max_size, "Maximum size")
+    for lower, upper, label in ((min_year, max_year, "year"), (min_size, max_size, "size")):
+        if lower is not None and upper is not None and lower > upper:
+            raise ValueError(f"Minimum {label} must not exceed maximum {label}.")
+    for column, lower, upper in (("fire_year", min_year, max_year), ("fire_size", min_size, max_size)):
+        if lower is not None:
+            filtered_gdf = filtered_gdf[filtered_gdf[column] >= lower]
+        if upper is not None:
+            filtered_gdf = filtered_gdf[filtered_gdf[column] <= upper]
 
+    user_point = buffer_deg = watershed_polygon = None
+    coords = "" if distance_coords is None else distance_coords
+    radius = filter_number(distance_radius, "Radius")
+    if not isinstance(coords, str):
+        raise ValueError("Coordinates must use latitude, longitude.")
+    coords = coords.strip()
+    if bool(coords) != (radius is not None):
+        raise ValueError("Enter both coordinates and a radius, or leave both empty.")
+    if coords:
+        try:
+            lat, lon = map(float, coords.split(","))
+            if not (math.isfinite(lat) and math.isfinite(lon) and -80 <= lat <= 84 and -180 <= lon <= 180):
+                raise ValueError
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Coordinates must use latitude, longitude within the supported UTM area (-80 to 84 latitude).") from exc
+        if radius <= 0:
+            raise ValueError("Radius must be greater than zero.")
+        user_point = gpd.GeoSeries([Point(lon, lat)], crs="EPSG:4326")
+        buffer_deg = user_point.to_crs(user_point.estimate_utm_crs()).buffer(radius * 1000).to_crs("EPSG:4326")
+        buffer_filter = buffer_deg.to_crs(fire_gdf.crs).iloc[0]
+        filtered_gdf = filtered_gdf[filtered_gdf.geometry.intersects(buffer_filter)]
+
+    if watershed_name:
+        if not isinstance(watershed_name, str):
+            raise ValueError("Watershed name must be text.")
+        selected_ws = watershed_data[watershed_data["watershed_name"] == watershed_name.strip()]
+        if selected_ws.empty:
+            raise ValueError(f'No watershed found with name "{watershed_name}".')
+        watershed_polygon = selected_ws.geometry.union_all()
+        watershed_filter = gpd.GeoSeries([watershed_polygon], crs=watershed_data.crs).to_crs(fire_gdf.crs).iloc[0]
+        filtered_gdf = filtered_gdf[filtered_gdf.geometry.within(watershed_filter)]
+
+    if polygon_geojson is not None:
+        boundary = parse_polygon_geojson(polygon_geojson)
+        boundary = gpd.GeoSeries([boundary], crs="EPSG:4326").to_crs(fire_gdf.crs).iloc[0]
+        # Query the spatial index to avoid comparing every fire to a complex boundary.
+        indices = filtered_gdf.sindex.query(boundary, predicate="intersects")
+        filtered_gdf = filtered_gdf.iloc[sorted(indices)]
+
+    return {
+        "filtered_gdf": filtered_gdf.copy(),
+        "user_point": user_point,
+        "buffer_geom": buffer_deg,
+        "watershed_polygon": watershed_polygon,
+    }
 
 
 def fx_download_json(filtered_data, MAX_SIZE_MB):    

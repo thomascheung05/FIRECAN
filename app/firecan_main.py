@@ -1,8 +1,15 @@
 MAX_SIZE_MB = 100
+LOCAL_PORT = 5050
 
 
-from firecan_fx import download_processed_data,fx_process_watershed_data,fx_process_qcfire_data,create_processeddata_folder,fx_process_canfire_data, fx_download_raw_data,convert_m_4326deg,fx_merge_provincial_fires,timenow,create_data_folder,fx_filter_fires_data,fx_download_json,fx_download_csv,timenow, fx_download_gpkg
-from flask import Flask, request # type: ignore
+from firecan_fx import (
+    download_processed_data, fx_process_watershed_data, fx_process_qcfire_data,
+    create_processeddata_folder, fx_process_canfire_data, fx_download_raw_data,
+    convert_m_4326deg, fx_merge_provincial_fires, timenow, create_data_folder,
+    fx_filter_fires_data, fx_download_json, fx_download_csv, fx_download_gpkg,
+    filter_number, parse_polygon_geojson, POLYGON_MAX_BYTES,
+)
+from flask import Flask, request, jsonify # type: ignore
 import json
 import geopandas as gpd
 import webbrowser
@@ -10,6 +17,8 @@ import threading
 from pathlib import Path
 import requests
 import io
+from shapely.geometry import mapping
+from werkzeug.exceptions import BadRequest, RequestEntityTooLarge
 
 
 work_dir = Path(__file__).resolve().parent.parent
@@ -80,7 +89,7 @@ else:
     if downloaded:
         (f'......... {timenow()} Download Sucess, Loading in Dataset')
         gdf_watershed_data = gpd.read_parquet(WATERSHED_PROCESSED_DATA_PATH)
-        watershed_data_togeojson=gdf_watershed_data
+        watershed_data_togeojson=gdf_watershed_data.copy()
         watershed_data_togeojson["geometry"] = watershed_data_togeojson["geometry"].simplify(tolerance=0.01)            # Simplyfying the tolerance for the geojson watershed polygons to reduce server load 
         watershed_data_togeojson.to_file(WATERSHED_PROCESSED_DATA_JSON_PATH, driver="GeoJSON")  #####
     else:
@@ -100,109 +109,100 @@ print('---------------Data pre-loading complete. The app is now ready to serve r
 
 
 app = Flask(__name__, static_folder=str(work_dir / 'static'))                                                     # This starts FLASK which allows me to talk back and forth with my web page and my java script
-@app.route('/fx_main', methods=['GET'])
-def fx_main():                                                                                    # This is the main fuctino that is run when my python is called by Flask 
-    #################### ######################################## ######################################## ######################################## ####################
-    # FLASK main function 
-    #################### ######################################## ######################################## ######################################## ####################
-    min_year = request.args.get('min_year', None)                                                    # This section here assings varibales for all the user inputed filtering conditions
-    max_year = request.args.get('max_year', None)                                     
-    min_size = request.args.get('min_size', None)
-    max_size = request.args.get('max_size', None)
-    distance_coords = request.args.get('distance_coords', None)
-    distance_radius = request.args.get('distance_radius', None)
-    watershed_name = request.args.get('watershed_name', None)
-    is_download_requested = request.args.get('download', '0') == '1'                                      # Checks if we should be displaying data or downloading it
-    downloadformat = request.args.get('downloadFormat', None)
-    provinces_str = request.args.get('provinces', '[]')   
-    selected_provinces = json.loads(provinces_str)         
-    
-    print(timenow(),'Filtering Data')                                                                                 # Uses the filtering fire function to return a dataset with only the fires the user wants 
-    results = fx_filter_fires_data(
-                                    gdf_fires,
-                                    gdf_watershed_data,
-                                    selected_provinces,
-                                    min_year=min_year,
-                                    max_year=max_year,
-                                    min_size=min_size,
-                                    max_size=max_size,
-                                    distance_coords=distance_coords,
-                                    distance_radius=distance_radius,
-                                    watershed_name=watershed_name,
-                                        )
-    print(timenow(),'Done Filtering Data')
+# Allow the boundary plus a small amount of JSON filter metadata.
+app.config["MAX_CONTENT_LENGTH"] = POLYGON_MAX_BYTES + 64 * 1024
+
+
+@app.errorhandler(RequestEntityTooLarge)
+def request_too_large(error):
+    return jsonify(error="Boundary upload must be 10 MB or smaller."), 413
+
+
+@app.route('/validate_polygon', methods=['POST'])
+def validate_polygon():
+    """Validate a boundary for preview without running a fire query."""
+    try:
+        if not request.is_json:
+            raise ValueError("Send the boundary as a JSON object.")
+        params = request.get_json()
+        if not isinstance(params, dict):
+            raise ValueError("Send the boundary as a JSON object.")
+        boundary = parse_polygon_geojson(params.get("polygon_geojson"))
+        return jsonify(geometry=mapping(boundary))
+    except (ValueError, TypeError, BadRequest) as exc:
+        return jsonify(error=str(exc) if not isinstance(exc, BadRequest) else "Could not read the JSON request."), 400
+
+
+@app.route('/fx_main', methods=['GET', 'POST'])
+def fx_main():
+    try:
+        if request.method == "POST":
+            if not request.is_json:
+                raise ValueError("Send filters as a JSON object.")
+            params = request.get_json()
+            if not isinstance(params, dict):
+                raise ValueError("Send filters as a JSON object.")
+            selected_provinces = params.get("provinces", ["ALL"])
+        else:
+            params = request.args
+            selected_provinces = json.loads(params.get("provinces", '["ALL"]'))
+
+        download = params.get("download", "0") in ("1", 1, True)
+        download_format = params.get("downloadFormat", "csv")
+        if download and download_format not in ("json", "csv", "gpkg"):
+            raise ValueError("Choose CSV, GeoJSON, or GPKG for download.")
+        tolerance = filter_number(params.get("polygon_tol"), "Polygon tolerance")
+        if tolerance is None:
+            tolerance = 50
+        results = fx_filter_fires_data(
+            gdf_fires, gdf_watershed_data, selected_provinces,
+            **{key: params.get(key) for key in (
+                "min_year", "max_year", "min_size", "max_size",
+                "distance_coords", "distance_radius", "watershed_name",
+            )},
+            polygon_geojson=params.get("polygon_geojson"),
+        )
+    except (ValueError, TypeError, BadRequest) as exc:
+        return jsonify(error=str(exc) if not isinstance(exc, BadRequest) else "Could not read the JSON request."), 400
 
     filtered_data = results["filtered_gdf"]
-    watershed_polygon = results["watershed_polygon"]
-    userpoint = results["user_point"]
-    bufferdeg = results["buffer_geom"]
-
-        
-    if is_download_requested:  
-        #################### ######################################## ######################################## ######################################## ####################
-        # Return a file to download
-        #################### ######################################## ######################################## ######################################## ####################                                                                                               
-        if downloadformat == 'json':
+    if download:
+        if download_format == "json":
             return fx_download_json(filtered_data, MAX_SIZE_MB)
-        elif downloadformat == 'csv':
+        if download_format == "csv":
             return fx_download_csv(filtered_data)
-        elif downloadformat == 'gpkg':
-            return fx_download_gpkg(filtered_data, MAX_SIZE_MB)
-    else:   
-        #################### ######################################## ######################################## ######################################## ####################                                                                                               
-        # Return a dataset to be displayed
-        #################### ######################################## ######################################## ######################################## ####################                                                                                                                                                                                                    
-        print(timenow(),'Converting to geojson',filtered_data.shape)
+        return fx_download_gpkg(filtered_data, MAX_SIZE_MB)
 
-        polygon_tol = request.args.get('polygon_tol', None)
-        polygon_tol = float(polygon_tol)
-        polygon_tol_deg = convert_m_4326deg(polygon_tol, 45)
-
-        filtered_data["geometry"] = filtered_data["geometry"].simplify(tolerance=polygon_tol_deg, preserve_topology=True)         # add precision option to change how good the polygons look vs load time
-        geojson_fires = json.loads(filtered_data.to_json())  ######################################## ######################################## ####################    ######################################## ######################################## ####################    ######################################## ######################################## ####################    ######################################## ######################################## ####################    ######################################## ######################################## ####################    ######################################## ######################################## ####################    ######################################## ######################################## ####################                                                                                 
-        print(timenow(),'Done Converting to geojson')    
-
-        geojson_point = json.loads(userpoint.to_json()) if userpoint is not None else None
-        geojson_buffer = json.loads(bufferdeg.to_json()) if bufferdeg is not None else None
-        
-        if watershed_polygon is not None:
-            ws_gs = gpd.GeoSeries([watershed_polygon], crs=gdf_watershed_data.crs)
-            ws_gs = ws_gs.to_crs("EPSG:4326")
-            geojson_watershedpolygon = json.loads(ws_gs.to_json())
-        else:
-            geojson_watershedpolygon = None
-
-        combined_geojson = {
-            "fires": geojson_fires,
-            "user_point": geojson_point,
-            "user_buffer": geojson_buffer,
-            "watershed_polygon" : geojson_watershedpolygon
-        }
-
-        #################### ######################################## ######################################## ######################################## ####################                                                                                               
-        # File size cap to reduce server cost
-        #################### ######################################## ######################################## ######################################## ####################                                                                                                                                                                                                    
-        MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024
-        geojson_bytes = len(json.dumps(combined_geojson).encode('utf-8'))
-        print(f'File Size {geojson_bytes/1000000}')
-        if geojson_bytes > MAX_SIZE_BYTES:                                                  # Error message
-            print(f'{geojson_bytes/1000000} is too big')
-            return {"error": f"Data too large to load ({geojson_bytes / 1024 / 1024:.2f} MB). Please re-fresh and narrow your filter."}, 413
+    # Display simplification must never change the shared dataset or exports.
+    display_data = filtered_data.to_crs("EPSG:4326").copy()
+    display_data["geometry"] = display_data.geometry.simplify(
+        tolerance=convert_m_4326deg(tolerance, 45), preserve_topology=True,
+    )
+    watershed_polygon = results["watershed_polygon"]
+    combined_geojson = {
+        "fires": json.loads(display_data.to_json()),
+        "user_point": json.loads(results["user_point"].to_json()) if results["user_point"] is not None else None,
+        "user_buffer": json.loads(results["buffer_geom"].to_json()) if results["buffer_geom"] is not None else None,
+        "watershed_polygon": json.loads(gpd.GeoSeries(
+            [watershed_polygon], crs=gdf_watershed_data.crs,
+        ).to_crs("EPSG:4326").to_json()) if watershed_polygon is not None else None,
+    }
+    size = len(json.dumps(combined_geojson).encode("utf-8"))
+    if size > MAX_SIZE_MB * 1024 * 1024:
+        return jsonify(error=f"Data too large to load ({size / 1024 / 1024:.2f} MB). Narrow your filters or increase display tolerance."), 413
+    return jsonify(combined_geojson)
 
 
-        return json.dumps(combined_geojson)
-
-                                
 @app.route('/')
 def serve_html():
     return app.send_static_file('firecan_web.html')
 
 def open_browser():
-    webbrowser.open_new("http://127.0.0.1:5000")
+    webbrowser.open_new(f"http://127.0.0.1:{LOCAL_PORT}")
 
 if __name__ == '__main__':
     threading.Timer(1, open_browser).start()  # small delay so server is up first
-    app.run(port=5000)
+    app.run(host="127.0.0.1", port=LOCAL_PORT)
 
 
 
