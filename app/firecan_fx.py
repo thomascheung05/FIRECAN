@@ -105,6 +105,10 @@ def fx_download_raw_data(dataname, url, zipname):
 
 
 def download_processed_data(url: str, filename: str, dest_dir: Path) -> bool:
+    #################### ######################################## ######################################## ######################################## ####################
+    # Download something using request.get() and unpack the zip 
+    #################### ######################################## ######################################## ######################################## ####################    
+
     try:
         response = requests.get(url)
         response.raise_for_status()
@@ -116,6 +120,9 @@ def download_processed_data(url: str, filename: str, dest_dir: Path) -> bool:
 
     
 def fx_process_canfire_data():
+    #################### ######################################## ######################################## ######################################## ####################
+    # Read in, drop/rename columns, remove QC fires, reproject, save, delete raw data 
+    #################### ######################################## ######################################## ######################################## ####################    
     
     gdf = gpd.read_file(CAN_RAW_DATA_PATH)
 
@@ -183,6 +190,10 @@ def fx_process_qcfire_data():
 
 
 def fx_process_watershed_data(gdf):
+    #################### ######################################## ######################################## ######################################## ####################
+    # raname, reproject, save as parquest AND geojson  
+    #################### ######################################## ######################################## ######################################## ####################    
+
     gdf = gdf[["WSCSDA_EN", "geometry"]].rename(columns={"WSCSDA_EN": "watershed_name"})
 
     gdf = repojectdata(gdf, 4326)
@@ -218,11 +229,14 @@ def fx_merge_provincial_fires(data1, data2):
 
 
 
+
 POLYGON_MAX_BYTES = 10 * 1024 * 1024
-
-
 def parse_polygon_geojson(document):
-    """Validate a WGS84 polygon upload and combine its features into one area."""
+    #################### ######################################## ######################################## ######################################## ####################
+    # Take in user inputed polygon json, validate it and combine features into one area
+    #################### ######################################## ######################################## ######################################## ####################
+    
+   
     try:
         encoded = json.dumps(document, allow_nan=False, ensure_ascii=False, separators=(",", ":"))
         size = len(encoded.encode("utf-8"))
@@ -239,8 +253,10 @@ def parse_polygon_geojson(document):
             raise ValueError("Boundary must be a GeoJSON polygon, feature, or feature collection.")
         crs = item.get("crs")
         if crs is not None:
+            # Checks if CRS is not 4326
             if not isinstance(crs, dict) or not isinstance(crs.get("properties"), dict):
                 raise ValueError("Boundary coordinates must use EPSG:4326 longitude/latitude.")
+            # Checks if CRS is formated properly
             if crs["properties"].get("name") not in {
                 "EPSG:4326", "urn:ogc:def:crs:EPSG::4326",
                 "urn:ogc:def:crs:OGC:1.3:CRS84", "OGC:CRS84",
@@ -249,9 +265,11 @@ def parse_polygon_geojson(document):
         kind = item.get("type")
         if kind == "FeatureCollection":
             features = item.get("features")
+            # Checks if the feature is empty
             if not isinstance(features, list) or not features:
                 raise ValueError("Boundary feature collection must not be empty.")
             for feature in features:
+                # Makes sure everything in geojson is a feature
                 if not isinstance(feature, dict) or feature.get("type") != "Feature":
                     raise ValueError("Feature collections must contain polygon features.")
                 read_polygon(feature)
@@ -259,12 +277,15 @@ def parse_polygon_geojson(document):
         if kind == "Feature":
             read_polygon(item.get("geometry"))
             return
+        # Makes sure the feature is a polygon or multipolygon
         if kind not in {"Polygon", "MultiPolygon"}:
             raise ValueError("Boundary must contain only Polygon or MultiPolygon geometries.")
+        # Makes sure geometry column is not empty
         coordinates = item.get("coordinates")
         polygons = [coordinates] if kind == "Polygon" else coordinates
         if not isinstance(polygons, list) or not polygons:
             raise ValueError("Boundary geometry must not be empty.")
+        # Verifies polygon rings
         for rings in polygons:
             if not isinstance(rings, list) or not rings:
                 raise ValueError("Each polygon must contain an outer ring.")
@@ -291,6 +312,10 @@ def parse_polygon_geojson(document):
 
 
 def filter_number(value, label, *, integer=False, minimum=0):
+    #################### ######################################## ######################################## ######################################## ####################
+    # Makes sure user inputed number is valid
+    #################### ######################################## ######################################## ######################################## ####################
+    
     if value is None or value == "":
         return None
     try:
@@ -310,23 +335,32 @@ def fx_filter_fires_data(
     distance_coords=None, distance_radius=None, watershed_name=None,
     polygon_geojson=None,
 ):
-    """Apply all active filters to original fire geometries without modifying them."""
+    #################### ######################################## ######################################## ######################################## ####################
+    # Applies all user inputed fileters to total_fire dataset and returns the filtered dataset
+    #################### ######################################## ######################################## ######################################## ####################
+    
+    # Makes sure province list is a list of provinces to include
     if not isinstance(provincelist, list) or any(not isinstance(p, str) for p in provincelist):
         raise ValueError("Provinces must be a list of province codes.")
+    # Filter the fire data right away based on the province list
     filtered_gdf = fire_gdf if "ALL" in provincelist else fire_gdf[fire_gdf["province"].isin(provincelist)]
+    # Take in year and size inputs
     min_year = filter_number(min_year, "Minimum year", integer=True)
     max_year = filter_number(max_year, "Maximum year", integer=True)
     min_size = filter_number(min_size, "Minimum size")
     max_size = filter_number(max_size, "Maximum size")
+    # Makes sure upper bound is not lower than lower bound
     for lower, upper, label in ((min_year, max_year, "year"), (min_size, max_size, "size")):
         if lower is not None and upper is not None and lower > upper:
             raise ValueError(f"Minimum {label} must not exceed maximum {label}.")
+    # Filters based on fire year and fire size
     for column, lower, upper in (("fire_year", min_year, max_year), ("fire_size", min_size, max_size)):
         if lower is not None:
             filtered_gdf = filtered_gdf[filtered_gdf[column] >= lower]
         if upper is not None:
             filtered_gdf = filtered_gdf[filtered_gdf[column] <= upper]
 
+    # Take in a verify user inputed coords and radius
     user_point = buffer_deg = watershed_polygon = None
     coords = "" if distance_coords is None else distance_coords
     radius = filter_number(distance_radius, "Radius")
@@ -344,6 +378,7 @@ def fx_filter_fires_data(
             raise ValueError("Coordinates must use latitude, longitude within the supported UTM area (-80 to 84 latitude).") from exc
         if radius <= 0:
             raise ValueError("Radius must be greater than zero.")
+        # Filter based on user inputed coords and radius 
         user_point = gpd.GeoSeries([Point(lon, lat)], crs="EPSG:4326")
         buffer_deg = user_point.to_crs(user_point.estimate_utm_crs()).buffer(radius * 1000).to_crs("EPSG:4326")
         buffer_filter = buffer_deg.to_crs(fire_gdf.crs).iloc[0]
