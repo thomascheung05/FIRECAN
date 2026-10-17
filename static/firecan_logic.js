@@ -88,6 +88,22 @@ L.control.layers({
   'Outdoors': Outdoors, 'Spinal': SpinalMap, 'Transport dark': TransportDark,
   'Pioneer': Pioneer, 'Mobile atlas': MobileAtlas, 'Neighbourhood': Neighbourhood,
 }, null, { position: 'topright', collapsed: true }).addTo(map);
+const themeControl = L.control({ position: 'topright' });
+themeControl.onAdd = () => {
+  const container = L.DomUtil.create('div', 'leaflet-bar map-theme-control');
+  const button = L.DomUtil.create('button', '', container);
+  button.id = 'themeButton';
+  button.type = 'button';
+  button.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3a9 9 0 1 0 0 18h1.2a2.3 2.3 0 0 0 1.7-3.9 1.3 1.3 0 0 1 1-2.2H17a4 4 0 0 0 4-4C21 6.5 17 3 12 3Z"/><circle cx="7.5" cy="11" r="1" fill="currentColor" stroke="none"/><circle cx="10" cy="7.5" r="1" fill="currentColor" stroke="none"/><circle cx="14.5" cy="7.5" r="1" fill="currentColor" stroke="none"/><circle cx="17" cy="11" r="1" fill="currentColor" stroke="none"/></svg>';
+  button.title = 'Choose a colour theme';
+  button.setAttribute('aria-label', 'Choose a colour theme');
+  button.setAttribute('aria-haspopup', 'dialog');
+  button.setAttribute('aria-controls', 'themeDialog');
+  L.DomEvent.disableClickPropagation(container);
+  L.DomEvent.disableScrollPropagation(container);
+  return container;
+};
+themeControl.addTo(map);
 L.control.scale({ position: 'bottomright', imperial: false }).addTo(map);
 
 let resultsLayer = null;
@@ -114,6 +130,26 @@ for (const dialog of document.querySelectorAll('dialog')) {
     if (event.target === dialog && (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom)) dialog.close();
   });
 }
+const themeChoices = document.querySelectorAll('#themeDialog input[name="theme"]');
+function applyTheme(theme) {
+  if (!Array.from(themeChoices).some(choice => choice.value === theme)) theme = 'ember';
+  document.documentElement.dataset.theme = theme;
+  for (const choice of themeChoices) choice.checked = choice.value === theme;
+  document.querySelector('meta[name="theme-color"]').content =
+    getComputedStyle(document.documentElement).getPropertyValue('--surface').trim();
+}
+applyTheme(document.documentElement.dataset.theme);
+$('themeButton').addEventListener('click', () => {
+  $('themeDialog').showModal();
+  $('themeDialog').querySelector('input:checked').focus();
+});
+$('themeDialog').addEventListener('change', event => {
+  if (!Array.from(themeChoices).includes(event.target)) return;
+  applyTheme(event.target.value);
+  try { localStorage.setItem('firecan-theme', event.target.value); }
+  catch { /* Keep the current selection even when storage is unavailable. */ }
+});
+$('themeDialog').addEventListener('close', () => $('themeButton').focus());
 $('aboutButton').addEventListener('click', () => $('aboutDialog').showModal());
 $('saveButton').addEventListener('click', () => {
   if (busy) return;
@@ -177,14 +213,14 @@ async function loadFilteredData(event) {
     const data = await response.json();
     // Build the replacement before removing existing results so failures preserve them.
     const layers = [L.geoJSON(data.fires, {
-      style: { color: '#ed8956', weight: 1.5, fillColor: '#d8542c', fillOpacity: .42 },
+      style: { className: 'fire-polygon', weight: 1.5, fillOpacity: .42 },
       onEachFeature: (feature, layer) => layer.bindPopup(popupDetails(feature.properties || {})),
     })];
-    if (data.user_buffer) layers.push(L.geoJSON(data.user_buffer, { style: { color: '#c4e8d5', weight: 2, fillOpacity: .08 } }));
+    if (data.user_buffer) layers.push(L.geoJSON(data.user_buffer, { style: { className: 'location-buffer', weight: 2, fillOpacity: .08 } }));
     if (data.user_point) layers.push(L.geoJSON(data.user_point, {
       pointToLayer: (feature, latlng) => L.marker(latlng, { icon: L.divIcon({ className: 'point-marker', iconSize: [12, 12] }) }),
     }));
-    if (data.watershed_polygon) layers.push(L.geoJSON(data.watershed_polygon, { style: { color: '#a7bbeb', weight: 2, fillOpacity: .07 } }));
+    if (data.watershed_polygon) layers.push(L.geoJSON(data.watershed_polygon, { style: { className: 'watershed-polygon', weight: 2, fillOpacity: .07 } }));
     const replacement = L.layerGroup(layers).addTo(map);
     if (resultsLayer) map.removeLayer(resultsLayer);
     resultsLayer = replacement;
@@ -211,7 +247,7 @@ $('polygonFile').addEventListener('change', async event => {
     try { document = JSON.parse(await file.text()); } catch { throw new Error('Could not read the file. Choose valid GeoJSON.'); }
     const response = await postJSON('/validate_polygon', { polygon_geojson: document });
     const data = await response.json();
-    const preview = L.geoJSON(data.geometry, { style: { color: '#72d5d9', weight: 2, fillOpacity: .06 }, interactive: false });
+    const preview = L.geoJSON(data.geometry, { style: { className: 'boundary-polygon', weight: 2, fillOpacity: .06 }, interactive: false });
     const bounds = preview.getBounds();
     if (!bounds.isValid()) throw new Error('Boundary has no displayable geometry.');
     preview.addTo(map);
@@ -307,7 +343,7 @@ $('watershedExplorerButton').addEventListener('click', async () => {
       L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 18, attribution: 'Tiles © Esri' }).addTo(watershedMap);
     }
     watershedLayer = L.geoJSON(data, {
-      style: { color: '#a7bbeb', weight: 1, fillOpacity: .12 },
+      style: { className: 'watershed-polygon', weight: 1, fillOpacity: .12 },
       onEachFeature: (feature, layer) => {
         const content = document.createElement('div');
         const name = feature.properties?.watershed_name || '';

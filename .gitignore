@@ -7,3 +7,4 @@ venv/
 .venv312/
 .DS_Store
 app/test
+next.txt

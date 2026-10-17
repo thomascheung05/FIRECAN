@@ -48,6 +48,7 @@ The first time you run the application, it will automatically create a VENV, ins
     *   Use the floating Filters panel to set your desired filters. Collapse it to see more of the map.
     *   Click the **"Filter Map"** button to apply the filters and display the corresponding fire polygons on the map.
     *   Click **Export** to download the current filter selection as CSV, GeoJSON, or GeoPackage. Geometry exports keep the original fire boundaries.
+    *   Use the palette icon below the map layer selector to choose Ember, Blue, Green, or Purple. Themes update menus, boundaries, watersheds, location buffers, and markers immediately and are remembered in this browser. Fire polygons keep consistent red/orange fills and orange outlines across all themes.
     *   Open **About** for help and data-source links.
 
 ## Configuration
@@ -87,7 +88,7 @@ FIRECAN utilizes publicly available data from the following sources:
 
 Under **Your boundary**, choose a `.geojson` or `.json` file up to 10 MB. The file must use EPSG:4326 longitude/latitude coordinates, in `[longitude, latitude]` order. Polygon and MultiPolygon geometries are supported, directly or inside a Feature or FeatureCollection. Collections must contain only polygon features; all features act as one search area, preserving holes.
 
-FIRECAN validates the boundary, previews it in cyan, and zooms to it. Click **Filter Map** to apply it. Matching includes fires that overlap or touch the boundary, combined with other active filters. It selects whole fire records rather than clipping their geometry or recalculating area. The same filters apply to exports.
+FIRECAN validates the boundary, previews it in the theme’s boundary colour, and zooms to it. Click **Filter Map** to apply it. Matching includes fires that overlap or touch the boundary, combined with other active filters. It selects whole fire records rather than clipping their geometry or recalculating area. The same filters apply to exports.
 
 Choose another file to replace the boundary, or click **Remove**. Invalid replacements keep the previous boundary. **Reset** clears the boundary and results and restores All provinces and the 50-metre display tolerance. Uploads remain temporary and are not saved on disk.
 

@@ -1,9 +1,18 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="ember">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#231816">
+  <script>
+    // Restore before styles load so a saved theme is used on the first paint.
+    try {
+      const theme = localStorage.getItem('firecan-theme');
+      if (['ember', 'blue', 'green', 'purple'].includes(theme)) {
+        document.documentElement.dataset.theme = theme;
+      }
+    } catch { /* Storage may be unavailable; keep Ember. */ }
+  </script>
   <title>FIRECAN · Historical fire explorer</title>
   <link rel="stylesheet" href="/static/leaflet.css">
   <link rel="stylesheet" href="/static/firecan_style.css">
@@ -80,6 +89,17 @@
       </form>
     </section>
   </div>
+  <dialog id="themeDialog" aria-labelledby="themeTitle" aria-describedby="themeHelp">
+    <div class="dialog-heading"><h2 id="themeTitle">Colour theme</h2><button type="button" class="icon-button" data-close aria-label="Close theme picker">×</button></div>
+    <p id="themeHelp" class="hint">Choose a colour. Your selection applies immediately and is remembered in this browser.</p>
+    <fieldset class="theme-options">
+      <legend>Choose a theme</legend>
+      <label class="theme-choice"><input type="radio" name="theme" value="ember" checked><span class="theme-swatch swatch-ember" aria-hidden="true"></span><span>Ember</span></label>
+      <label class="theme-choice"><input type="radio" name="theme" value="blue"><span class="theme-swatch swatch-blue" aria-hidden="true"></span><span>Blue</span></label>
+      <label class="theme-choice"><input type="radio" name="theme" value="green"><span class="theme-swatch swatch-green" aria-hidden="true"></span><span>Green</span></label>
+      <label class="theme-choice"><input type="radio" name="theme" value="purple"><span class="theme-swatch swatch-purple" aria-hidden="true"></span><span>Purple</span></label>
+    </fieldset>
+  </dialog>
   <dialog id="aboutDialog" aria-labelledby="aboutTitle">
     <div class="dialog-heading"><h2 id="aboutTitle">A record of Canada's fires</h2><button type="button" class="icon-button" data-close aria-label="Close About">×</button></div>
     <p>FIRECAN explores historical forest fire perimeters across Canada. Select filters, then choose <strong>Filter Map</strong>. Click a fire for its year, area, and data source.</p>
