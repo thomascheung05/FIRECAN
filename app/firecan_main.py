@@ -40,7 +40,7 @@ TOTALFIRE_DATA_PATH = PROCESSED_DATA_FOLDER_PATH / 'TotalFire_data.parquet'
 
 
 
-print('------------------------Starting data pre-loading. This may take a few minutes...', timenow(),'------------------------')                                      # This section here loads in the data, it uses the scrap donne quebec function and the process qc fire data fuction
+print('..',timenow(),'Starting data pre-loading') # This section here loads in the data, it uses the scrap donne quebec function and the process qc fire data fuction
 
 create_data_folder()
 create_processeddata_folder()

@@ -61,6 +61,7 @@ def reduce_coord_precision(gdf, decimals=COORD_DECIMALS):
     #################### ######################################## ######################################## ######################################## ####################
     # Snaps polygon coordinates to a grid of 10^-decimals degrees (drops excess decimal places), keeps geometries valid, drops any that collapse to empty
     #################### ######################################## ######################################## ######################################## ####################
+    print('............',timenow(), ' Simplifying data')
     gdf = gdf.copy()
     gdf["geometry"] = shapely.set_precision(gdf.geometry.values, grid_size=10 ** -decimals)
     empty = gdf.geometry.is_empty | gdf.geometry.isna()
