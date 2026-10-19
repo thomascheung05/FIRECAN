@@ -3,6 +3,7 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import shutil
 import sys
 import tempfile
 import unittest
@@ -13,8 +14,9 @@ from shapely.geometry import Polygon, box, mapping, shape
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'app'))
+import firecan_fx
 from firecan_fx import (
-    fx_build_fire_files, fx_filter_fires_data, fx_load_fire_display, fx_read_fire_geometry, fx_with_full_geometry, parse_polygon_geojson,
+    fx_build_fire_files, fx_fire_files_ready, fx_filter_fires_data, fx_load_fire_display, fx_read_fire_geometry, fx_with_full_geometry, parse_polygon_geojson,
 )
 
 
@@ -140,6 +142,74 @@ class FilteringTests(unittest.TestCase):
                 self.assertEqual(self.client.post('/fx_main', json={}).status_code, 503)
                 self.assertEqual(self.client.get('/data_status').json, {'state': state})
         self.assertEqual(self.client.post('/fx_main', data='x' * (10 * 1024 * 1024 + 65537), content_type='application/json').status_code, 413)
+
+
+
+class FireFilesTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp)
+        self.fires = gpd.GeoDataFrame({
+            'province': ['QC', 'ON', 'BC', 'AB'], 'fire_year': [2000, 2010, 2020, 2021], 'fire_size': [10, 20, 30, 40],
+        }, geometry=[box(0, 0, 1, 1), box(20, 20, 21, 21), box(-40, 5, -39, 6), box(9, -30, 10, -29)], crs=4326)
+        # Stand-in for the Git release, holding both built files
+        self.release = self.tmp / 'release'
+        self.release.mkdir()
+        fx_build_fire_files(self.fires, self.release / 'TotalFire_data.parquet', self.release / 'TotalFire_display50m.parquet')
+        self.processed = self.tmp / 'processed'
+        self.processed.mkdir()
+        self.full = self.processed / 'TotalFire_data.parquet'
+        self.display = self.processed / 'TotalFire_display50m.parquet'
+
+    def fake_download(self, url, filename, dest_dir):
+        source = self.release / filename
+        if not source.exists():
+            return False
+        shutil.copy(source, Path(dest_dir) / filename)
+        return True
+
+    def get_fire_data(self):
+        with patch.object(firecan_fx, 'TOTALFIRE_DATA_PATH', self.full), \
+             patch.object(firecan_fx, 'FIRE_DISPLAY_DATA_PATH', self.display), \
+             patch.object(firecan_fx, 'PROCESSED_DATA_FOLDER_PATH', self.processed), \
+             patch.object(firecan_fx, 'download_processed_data', side_effect=self.fake_download), \
+             patch.object(firecan_fx, 'fx_download_raw_data', side_effect=RuntimeError('source download')), \
+             patch.object(firecan_fx, 'fx_build_fire_files', wraps=fx_build_fire_files) as build:
+            firecan_fx.fx_get_fire_data(download_from_git=True)
+            return build
+
+    def test_ready_needs_files_that_line_up(self):
+        self.assertTrue(fx_fire_files_ready(self.release / 'TotalFire_data.parquet', self.release / 'TotalFire_display50m.parquet'))
+        self.assertFalse(fx_fire_files_ready(self.full, self.display))
+        # A full file whose rows are in a different order than the display copy, e.g. an older unsorted upload
+        full = gpd.read_parquet(self.release / 'TotalFire_data.parquet')
+        full.iloc[::-1].reset_index(drop=True).to_parquet(self.full)
+        shutil.copy(self.release / 'TotalFire_display50m.parquet', self.display)
+        self.assertFalse(fx_fire_files_ready(self.full, self.display))
+
+    def test_git_download_uses_both_built_files(self):
+        build = self.get_fire_data()
+        build.assert_not_called()
+        self.assertTrue(fx_fire_files_ready(self.full, self.display))
+
+    def test_git_without_display_copy_builds_it(self):
+        (self.release / 'TotalFire_display50m.parquet').unlink()
+        build = self.get_fire_data()
+        build.assert_called_once()
+        self.assertTrue(fx_fire_files_ready(self.full, self.display))
+
+    def test_git_with_mismatched_files_rebuilds(self):
+        full = gpd.read_parquet(self.release / 'TotalFire_data.parquet')
+        full.iloc[::-1].reset_index(drop=True).to_parquet(self.release / 'TotalFire_data.parquet')
+        build = self.get_fire_data()
+        build.assert_called_once()
+        self.assertTrue(fx_fire_files_ready(self.full, self.display))
+
+    def test_git_failure_falls_back_to_source(self):
+        for name in ('TotalFire_data.parquet', 'TotalFire_display50m.parquet'):
+            (self.release / name).unlink()
+        with self.assertRaisesRegex(RuntimeError, 'source download'):
+            self.get_fire_data()
 
 
 if __name__ == '__main__':

@@ -33,6 +33,7 @@ WATERSHED_PROCESSED_DATA_PATH = PROCESSED_DATA_FOLDER_PATH / 'watershed_data.par
 WATERSHED_PROCESSED_DATA_JSON_PATH = work_dir/ 'static' / 'watershed_data.geojson'
 TOTALFIRE_DATA_PATH = PROCESSED_DATA_FOLDER_PATH / 'TotalFire_data.parquet'
 FIRE_DATA_GIT_URL = 'https://github.com/thomascheung05/FIRECAN/releases/download/DataV1/TotalFire_data.parquet'
+FIRE_DISPLAY_GIT_URL = 'https://github.com/thomascheung05/FIRECAN/releases/download/DataV1/TotalFire_display50m.parquet'
 FIRE_DISPLAY_DATA_PATH = PROCESSED_DATA_FOLDER_PATH / 'TotalFire_display50m.parquet'
 FIRE_DISPLAY_TOLERANCE_M = 50                                                                  # the in memory copy is simplified to this, matches the map's default display tolerance
 FIRE_ROW_GROUP_SIZE = 1000                                                                      # small row groups so reading a few fires' full geometry only reads a little of the file
@@ -275,11 +276,20 @@ def fx_build_fire_files(gdf, full_path=TOTALFIRE_DATA_PATH, display_path=FIRE_DI
 
 def fx_fire_files_ready(full_path=TOTALFIRE_DATA_PATH, display_path=FIRE_DISPLAY_DATA_PATH):
     #################### ######################################## ######################################## ######################################## ####################
-    # True if both fire files exist and line up row for row
+    # True if both fire files exist and line up row for row: same number of rows, and a few sample fires' full detail bounds
+    # match the bounds stored in the display copy (catches a full file from a different build, e.g. an unsorted one)
     #################### ######################################## ######################################## ######################################## ####################
     try:
-        return pq.read_metadata(full_path).num_rows == pq.read_metadata(display_path).num_rows
-    except Exception:                                                                           # missing or unreadable file
+        num_rows = pq.read_metadata(full_path).num_rows
+        if num_rows != pq.read_metadata(display_path).num_rows:
+            return False
+        if num_rows == 0:
+            return True
+        ids = np.unique(np.linspace(0, num_rows - 1, 5).astype(np.int64))
+        stored = pq.read_table(display_path, columns=BBOX_COLUMNS).take(pa.array(ids)).to_pandas().to_numpy()
+        actual = fx_read_fire_geometry(ids, full_path).bounds.to_numpy()
+        return bool(np.allclose(stored, actual))
+    except Exception:                                                                           # missing or unreadable file, or no bbox columns
         return False
 
 
@@ -343,24 +353,30 @@ def fx_get_fire_data(download_from_git):
     # otherwise tries the prebuilt data on Git if download_from_git is True and falls back to downloading and processing from the source
     #################### ######################################## ######################################## ######################################## ####################
     with _fire_data_lock:                                                                       # a second caller waits here instead of starting a second download
-        if fx_fire_files_ready():
+        if fx_fire_files_ready(TOTALFIRE_DATA_PATH, FIRE_DISPLAY_DATA_PATH):
             return
 
         if TOTALFIRE_DATA_PATH.exists():
             try:
                 print(f'...... {timenow()} Rebuilding the Fire Data Files From the Existing Dataset (This May Take Up to 15 Minutes)')
-                fx_build_fire_files(gpd.read_parquet(TOTALFIRE_DATA_PATH))
+                fx_build_fire_files(gpd.read_parquet(TOTALFIRE_DATA_PATH), TOTALFIRE_DATA_PATH, FIRE_DISPLAY_DATA_PATH)
                 return
             except Exception as exc:
                 print(f'...... {timenow()} Could Not Rebuild From the Existing Dataset ({exc}), Downloading Again')
                 TOTALFIRE_DATA_PATH.unlink(missing_ok=True)
 
         if download_from_git:
+            # Git has both files already built, so nothing needs to be sorted or simplified
             print(f'...... {timenow()} Attempting to Download Fire Data from Git')
-            if download_processed_data(FIRE_DATA_GIT_URL, 'TotalFire_data.parquet', PROCESSED_DATA_FOLDER_PATH):
-                try:
-                    print(f'......... {timenow()} Download Sucess, Building the Fire Data Files')
-                    fx_build_fire_files(gpd.read_parquet(TOTALFIRE_DATA_PATH))
+            full_ok = download_processed_data(FIRE_DATA_GIT_URL, TOTALFIRE_DATA_PATH.name, PROCESSED_DATA_FOLDER_PATH)
+            if full_ok and download_processed_data(FIRE_DISPLAY_GIT_URL, FIRE_DISPLAY_DATA_PATH.name, PROCESSED_DATA_FOLDER_PATH) and fx_fire_files_ready(TOTALFIRE_DATA_PATH, FIRE_DISPLAY_DATA_PATH):
+                print(f'......... {timenow()} Download Sucess')
+                return
+            FIRE_DISPLAY_DATA_PATH.unlink(missing_ok=True)
+            if full_ok:
+                try:                                                                            # only the full file came through usable, build the display copy from it
+                    print(f'......... {timenow()} Could Not Get Both Fire Files from Git, Building Them From the Downloaded Dataset')
+                    fx_build_fire_files(gpd.read_parquet(TOTALFIRE_DATA_PATH), TOTALFIRE_DATA_PATH, FIRE_DISPLAY_DATA_PATH)
                     return
                 except Exception:
                     TOTALFIRE_DATA_PATH.unlink(missing_ok=True)
