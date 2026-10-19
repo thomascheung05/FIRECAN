@@ -1,5 +1,6 @@
 MAX_SIZE_MB = 100
 LOCAL_PORT = 5050
+DOWNLOAD_FROM_GIT = False       # True: try the prebuilt data on Git first (falls back to the source if that fails). False: always download and process from the source
 
 
 from firecan_fx import (
@@ -26,7 +27,6 @@ DATA_FOLDER_PATH = work_dir / 'data'
 PROCESSED_DATA_FOLDER_PATH = DATA_FOLDER_PATH / "processed_data"
 CAN_PROCESSED_DATA_PATH = PROCESSED_DATA_FOLDER_PATH / "can_processed_fire_data.parquet"  # processed data output
 CAN_RAW_DATA_FOLDER_PATH = DATA_FOLDER_PATH / "canfire"
-CAN_RAW_DATA_PATH = DATA_FOLDER_PATH / "canfire" / "NFDB_poly_1972to2020_20250630.shp"
 QC_PROCESSED_DATA_PATH = PROCESSED_DATA_FOLDER_PATH / 'qc_processed_fire_data.parquet'
 QC_BEFORE_RAW_DATA_FOLDER_PATH = DATA_FOLDER_PATH / 'qcfires_before76' 
 QC_AFTER_RAW_DATA_FOLDER_PATH = DATA_FOLDER_PATH / 'qcfires_after76' 
@@ -49,12 +49,20 @@ if TOTALFIRE_DATA_PATH.exists():
     print(f'...... {timenow()} The Full Dataset Already Exists, Loading in Now')
     gdf_fires = gpd.read_parquet(TOTALFIRE_DATA_PATH)
 else: 
-    print(f'...... {timenow()} Attempting to Download Fire Data from Git')
-    downloaded = download_processed_data('https://github.com/thomascheung05/FIRECAN/releases/download/DataV1/TotalFire_data.parquet', 'TotalFire_data.parquet', PROCESSED_DATA_FOLDER_PATH)
-    if downloaded:
-        (f'......... {timenow()} Download Sucess, Loading in Dataset')
-        gdf_fires = gpd.read_parquet(TOTALFIRE_DATA_PATH)
-    else:
+    downloaded = False
+    if DOWNLOAD_FROM_GIT:
+        print(f'...... {timenow()} Attempting to Download Fire Data from Git')
+        downloaded = download_processed_data('https://github.com/thomascheung05/FIRECAN/releases/download/DataV1/TotalFire_data.parquet', 'TotalFire_data.parquet', PROCESSED_DATA_FOLDER_PATH)
+        if downloaded:
+            try:
+                print(f'......... {timenow()} Download Sucess, Loading in Dataset')
+                gdf_fires = gpd.read_parquet(TOTALFIRE_DATA_PATH)
+            except Exception:
+                downloaded = False
+                TOTALFIRE_DATA_PATH.unlink(missing_ok=True)
+        if not downloaded:
+            print(f'...... {timenow()} Could Not Get Fire Data from Git, Falling Back to the Source')
+    if not downloaded:
         if not CAN_PROCESSED_DATA_PATH.exists():
             print(f'...... {timenow()} The Raw Canada Data Does Not Exist, Downloading Now')
             fx_download_raw_data('canfire','https://cwfis.cfs.nrcan.gc.ca/downloads/nfdb/fire_poly/current_version/NFDB_poly.zip','NFDB_poly.zip',)    
@@ -84,11 +92,20 @@ if WATERSHED_PROCESSED_DATA_PATH.exists() and WATERSHED_PROCESSED_DATA_JSON_PATH
     print(f'...... {timenow()} Loading in Watershed Data')
     gdf_watershed_data = gpd.read_parquet(WATERSHED_PROCESSED_DATA_PATH)
 else:
-    print(f'...... {timenow()} Attempting to Download Watershed Data from Git')
-    downloaded = download_processed_data('https://github.com/thomascheung05/FIRECAN/releases/download/DataV1/watershed_data.parquet', 'watershed_data.parquet', PROCESSED_DATA_FOLDER_PATH)
+    downloaded = False
+    if DOWNLOAD_FROM_GIT:
+        print(f'...... {timenow()} Attempting to Download Watershed Data from Git')
+        downloaded = download_processed_data('https://github.com/thomascheung05/FIRECAN/releases/download/DataV1/watershed_data.parquet', 'watershed_data.parquet', PROCESSED_DATA_FOLDER_PATH)
+        if downloaded:
+            try:
+                print(f'......... {timenow()} Download Sucess, Loading in Dataset')
+                gdf_watershed_data = gpd.read_parquet(WATERSHED_PROCESSED_DATA_PATH)
+            except Exception:
+                downloaded = False
+                WATERSHED_PROCESSED_DATA_PATH.unlink(missing_ok=True)
+        if not downloaded:
+            print(f'...... {timenow()} Could Not Get Watershed Data from Git, Falling Back to the Source')
     if downloaded:
-        (f'......... {timenow()} Download Sucess, Loading in Dataset')
-        gdf_watershed_data = gpd.read_parquet(WATERSHED_PROCESSED_DATA_PATH)
         watershed_data_togeojson=gdf_watershed_data.copy()
         watershed_data_togeojson["geometry"] = watershed_data_togeojson["geometry"].simplify(tolerance=0.01)            # Simplyfying the tolerance for the geojson watershed polygons to reduce server load 
         watershed_data_togeojson.to_file(WATERSHED_PROCESSED_DATA_JSON_PATH, driver="GeoJSON")  #####

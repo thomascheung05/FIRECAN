@@ -11,6 +11,7 @@ from shapely.geometry import Point, shape
 from shapely.ops import unary_union
 import math
 import shutil
+import shapely
 
 
 
@@ -19,7 +20,6 @@ DATA_FOLDER_PATH = work_dir / 'data'
 PROCESSED_DATA_FOLDER_PATH = DATA_FOLDER_PATH / "processed_data"
 CAN_PROCESSED_DATA_PATH = PROCESSED_DATA_FOLDER_PATH / "can_processed_fire_data.parquet"  # processed data output
 CAN_RAW_DATA_FOLDER_PATH = DATA_FOLDER_PATH / "canfire"
-CAN_RAW_DATA_PATH = DATA_FOLDER_PATH / "canfire" / "NFDB_poly_1972to2020_20250630.shp"
 QC_PROCESSED_DATA_PATH = PROCESSED_DATA_FOLDER_PATH / 'qc_processed_fire_data.parquet'
 QC_BEFORE_RAW_DATA_FOLDER_PATH = DATA_FOLDER_PATH / 'qcfires_before76' 
 QC_AFTER_RAW_DATA_FOLDER_PATH = DATA_FOLDER_PATH / 'qcfires_after76' 
@@ -28,6 +28,7 @@ QC_AFTER_RAW_DATA_PATH = QC_AFTER_RAW_DATA_FOLDER_PATH / 'FEUX_PROV.gpkg'
 WATERSHED_PROCESSED_DATA_PATH = PROCESSED_DATA_FOLDER_PATH / 'watershed_data.parquet'
 WATERSHED_PROCESSED_DATA_JSON_PATH = work_dir/ 'static' / 'watershed_data.geojson'
 TOTALFIRE_DATA_PATH = PROCESSED_DATA_FOLDER_PATH / 'TotalFire_data.parquet'
+COORD_DECIMALS = 5                                                                              # 5 decimal places in EPSG:4326 is ~1 m, plenty for fire/watershed boundaries
 
 
 
@@ -51,6 +52,21 @@ def repojectdata(data, targetcrs):
     else:
         data = data.to_crs(targetcrs)    
         return data
+
+
+
+
+
+def reduce_coord_precision(gdf, decimals=COORD_DECIMALS):
+    #################### ######################################## ######################################## ######################################## ####################
+    # Snaps polygon coordinates to a grid of 10^-decimals degrees (drops excess decimal places), keeps geometries valid, drops any that collapse to empty
+    #################### ######################################## ######################################## ######################################## ####################
+    gdf = gdf.copy()
+    gdf["geometry"] = shapely.set_precision(gdf.geometry.values, grid_size=10 ** -decimals)
+    empty = gdf.geometry.is_empty | gdf.geometry.isna()
+    if empty.any():
+        print(f'............ {empty.sum()} polygons collapsed after reducing precision, dropping them')
+    return gdf[~empty]
 
 
 
@@ -124,9 +140,17 @@ def fx_process_canfire_data():
     # Read in, drop/rename columns, remove QC fires, reproject, save, delete raw data 
     #################### ######################################## ######################################## ######################################## ####################    
     
-    gdf = gpd.read_file(CAN_RAW_DATA_PATH)
+    shapefiles = sorted(CAN_RAW_DATA_FOLDER_PATH.glob('NFDB_poly_*.shp'))         # the NFDB zip is split by period (e.g. 1972to2020 and 2021to2024), read every part
+    if not shapefiles:
+        raise FileNotFoundError(f'No NFDB_poly_*.shp files found in {CAN_RAW_DATA_FOLDER_PATH}')
+    parts = []
+    for shp in shapefiles:
+        print(f'............ {timenow()} Reading {shp.name}')
+        part = gpd.read_file(shp)
+        part = part[['YEAR', 'SIZE_HA', 'SRC_AGENCY', 'MAP_SOURCE', 'geometry']]
+        parts.append(repojectdata(part, 4326))
+    gdf = gpd.GeoDataFrame(pd.concat(parts, ignore_index=True), geometry='geometry', crs=parts[0].crs)
 
-    gdf = gdf[['YEAR', 'SIZE_HA', 'SRC_AGENCY', 'MAP_SOURCE', 'geometry']]
     gdf = gdf.rename(columns={'YEAR': 'fire_year'})
     gdf = gdf.rename(columns={'SIZE_HA': 'fire_size'})
     gdf = gdf.rename(columns={'SRC_AGENCY': 'province'}) 
@@ -138,6 +162,7 @@ def fx_process_canfire_data():
         
 
     gdf = repojectdata(gdf, 4326) 
+    gdf = reduce_coord_precision(gdf)
    
 
     gdf.to_parquet(CAN_PROCESSED_DATA_PATH)
@@ -176,6 +201,7 @@ def fx_process_qcfire_data():
     merged_data["data_aquisition"] = pd.NA
 
     merged_data = repojectdata(merged_data, 4326)
+    merged_data = reduce_coord_precision(merged_data)
 
     
     merged_data.to_parquet(QC_PROCESSED_DATA_PATH)
@@ -197,11 +223,14 @@ def fx_process_watershed_data(gdf):
     gdf = gdf[["WSCSDA_EN", "geometry"]].rename(columns={"WSCSDA_EN": "watershed_name"})
 
     gdf = repojectdata(gdf, 4326)
+    gdf = reduce_coord_precision(gdf)
     
     gdf.to_parquet(WATERSHED_PROCESSED_DATA_PATH)
-    gdftogeojson=gdf
+    gdftogeojson=gdf.copy()
     gdftogeojson["geometry"] = gdftogeojson["geometry"].simplify(tolerance=0.01)            # Simplyfying the tolerance for the geojson watershed polygons to reduce server load 
     gdftogeojson.to_file(WATERSHED_PROCESSED_DATA_JSON_PATH, driver="GeoJSON") 
+
+    return gdf
     
     
     
