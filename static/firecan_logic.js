@@ -166,7 +166,7 @@ async function watchFireData(sawDownload = false) {
     sawDownload = true;
     showDataStatus('Downloading and processing fire data. On first run this can take up to 15 minutes; filtering unlocks when it finishes.', { spinner: true });
   }
-  setTimeout(() => watchFireData(sawDownload), 3000);
+  setTimeout(() => watchFireData(sawDownload), 5000);
 }
 setBusy(false);
 watchFireData();
