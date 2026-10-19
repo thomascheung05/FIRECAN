@@ -126,13 +126,50 @@ function showError(message, target = 'errorMessage') {
   $(target).textContent = message;
   $(target).hidden = false;
 }
+// Fire queries stay disabled until the server has the fire data on disk.
+let fireDataReady = false;
 function setBusy(active, message = 'Loading fires…') {
   busy = active;
   $('loadingMessage').hidden = !active;
   $('loadingText').textContent = message;
   $('filterPanel').setAttribute('aria-busy', String(active));
-  for (const id of ['filterButton', 'saveButton', 'downloadButton', 'polygonFile', 'removePolygon', 'clearFilters']) $(id).disabled = active;
+  for (const id of ['polygonFile', 'removePolygon', 'clearFilters']) $(id).disabled = active;
+  for (const id of ['filterButton', 'saveButton', 'downloadButton']) $(id).disabled = active || !fireDataReady;
 }
+let dataStatusTimer;
+function showDataStatus(message, { spinner = false, error = false, dismissable = false } = {}) {
+  clearTimeout(dataStatusTimer);
+  $('dataStatusText').textContent = message;
+  $('dataStatusSpinner').hidden = !spinner;
+  $('dataStatusClose').hidden = !dismissable;
+  $('dataStatus').classList.toggle('is-error', error);
+  $('dataStatus').hidden = false;
+}
+$('dataStatusClose').addEventListener('click', () => { $('dataStatus').hidden = true; });
+async function watchFireData(sawDownload = false) {
+  let state = 'checking';
+  try { state = (await (await fetch('/data_status')).json()).state; } catch { /* Server busy or restarting; check again. */ }
+  if (state === 'ready') {
+    fireDataReady = true;
+    setBusy(busy);
+    if (sawDownload) {
+      showDataStatus('Fire data is ready. You can now filter and export fires.', { dismissable: true });
+      dataStatusTimer = setTimeout(() => { $('dataStatus').hidden = true; }, 10000);
+    }
+    return;
+  }
+  if (state === 'error') {
+    showDataStatus("Couldn't download the fire data. Check the terminal for details and restart the app.", { error: true });
+    return;
+  }
+  if (state === 'downloading') {
+    sawDownload = true;
+    showDataStatus('Downloading and processing fire data. On first run this can take up to 15 minutes; filtering unlocks when it finishes.', { spinner: true });
+  }
+  setTimeout(() => watchFireData(sawDownload), 3000);
+}
+setBusy(false);
+watchFireData();
 function collectFilters() {
   const fields = {
     min_year: 'minYear', max_year: 'maxYear', min_size: 'minSize', max_size: 'maxSize',

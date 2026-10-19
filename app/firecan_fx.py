@@ -7,11 +7,15 @@ from flask import send_file   # type: ignore
 import io
 from pathlib import Path
 import pandas as pd
-from shapely.geometry import Point, shape
+from shapely.geometry import Point, box, shape
 from shapely.ops import unary_union
 import math
 import shutil
 import shapely
+import numpy as np
+import threading
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 
 
@@ -28,6 +32,11 @@ QC_AFTER_RAW_DATA_PATH = QC_AFTER_RAW_DATA_FOLDER_PATH / 'FEUX_PROV.gpkg'
 WATERSHED_PROCESSED_DATA_PATH = PROCESSED_DATA_FOLDER_PATH / 'watershed_data.parquet'
 WATERSHED_PROCESSED_DATA_JSON_PATH = work_dir/ 'static' / 'watershed_data.geojson'
 TOTALFIRE_DATA_PATH = PROCESSED_DATA_FOLDER_PATH / 'TotalFire_data.parquet'
+FIRE_DATA_GIT_URL = 'https://github.com/thomascheung05/FIRECAN/releases/download/DataV1/TotalFire_data.parquet'
+FIRE_DISPLAY_DATA_PATH = PROCESSED_DATA_FOLDER_PATH / 'TotalFire_display50m.parquet'
+FIRE_DISPLAY_TOLERANCE_M = 50                                                                  # the in memory copy is simplified to this, matches the map's default display tolerance
+FIRE_ROW_GROUP_SIZE = 1000                                                                      # small row groups so reading a few fires' full geometry only reads a little of the file
+BBOX_COLUMNS = ['bbox_minx', 'bbox_miny', 'bbox_maxx', 'bbox_maxy']                             # exact bounds of the full detail geometry, kept in the display copy
 COORD_DECIMALS = 5                                                                              # 5 decimal places in EPSG:4326 is ~1 m, plenty for fire/watershed boundaries
 
 
@@ -242,6 +251,148 @@ def fx_process_watershed_data(gdf):
 
 
 
+def fx_build_fire_files(gdf, full_path=TOTALFIRE_DATA_PATH, display_path=FIRE_DISPLAY_DATA_PATH):
+    #################### ######################################## ######################################## ######################################## ####################
+    # Saves the fire data as two files that line up row for row:
+    #   full_path    - full detail geometry, sorted by location in small row groups so fx_read_fire_geometry only reads the groups holding the fires it needs
+    #   display_path - attributes, each fire's exact bounds and geometry simplified to FIRE_DISPLAY_TOLERANCE_M, small enough to keep in memory for filtering and the map
+    #################### ######################################## ######################################## ######################################## ####################
+    gdf = gdf.iloc[gdf.geometry.hilbert_distance().argsort(kind='stable')].reset_index(drop=True)      # nearby fires end up in the same row groups
+
+    display = gdf.copy()
+    display[BBOX_COLUMNS] = gdf.geometry.bounds.to_numpy()
+    display["geometry"] = display.geometry.simplify(convert_m_4326deg(FIRE_DISPLAY_TOLERANCE_M, 45), preserve_topology=True)
+
+    # write to temporary names then rename, the display file is written last so its presence means the build finished
+    for data, path, options in ((gdf, full_path, {"row_group_size": FIRE_ROW_GROUP_SIZE}), (display, display_path, {})):
+        tmp_path = path.with_name(path.name + '.tmp')
+        data.to_parquet(tmp_path, **options)
+        tmp_path.replace(path)
+
+
+
+
+
+def fx_fire_files_ready(full_path=TOTALFIRE_DATA_PATH, display_path=FIRE_DISPLAY_DATA_PATH):
+    #################### ######################################## ######################################## ######################################## ####################
+    # True if both fire files exist and line up row for row
+    #################### ######################################## ######################################## ######################################## ####################
+    try:
+        return pq.read_metadata(full_path).num_rows == pq.read_metadata(display_path).num_rows
+    except Exception:                                                                           # missing or unreadable file
+        return False
+
+
+
+
+
+def fx_load_fire_display(display_path=FIRE_DISPLAY_DATA_PATH):
+    #################### ######################################## ######################################## ######################################## ####################
+    # Loads the simplified fire data that stays in memory, its index is each fire's row number in the full detail file
+    #################### ######################################## ######################################## ######################################## ####################
+    return gpd.read_parquet(display_path)
+
+
+
+
+
+def fx_read_fire_geometry(ids, full_path=TOTALFIRE_DATA_PATH):
+    #################### ######################################## ######################################## ######################################## ####################
+    # Reads the full detail geometry for the given row numbers, only reading the row groups that hold them. Returns a GeoSeries indexed by ids
+    #################### ######################################## ######################################## ######################################## ####################
+    ids = np.asarray(ids, dtype=np.int64)
+    parquet = pq.ParquetFile(full_path)
+    geo = json.loads(parquet.schema_arrow.metadata[b'geo'])
+    crs = geo['columns'][geo['primary_column']].get('crs', 'OGC:CRS84')                        # GeoParquet leaves crs out when it is OGC:CRS84
+    if len(ids) == 0:
+        return gpd.GeoSeries([], index=ids, crs=crs)
+
+    group_starts = np.cumsum([0] + [parquet.metadata.row_group(i).num_rows for i in range(parquet.num_row_groups)])
+    id_groups = np.searchsorted(group_starts, ids, side='right') - 1
+    groups = np.unique(id_groups)
+    table = parquet.read_row_groups(groups.tolist(), columns=[geo['primary_column']])
+    # position of each id inside the table made of only the groups that were read
+    group_offsets = np.cumsum([0] + [group_starts[g + 1] - group_starts[g] for g in groups[:-1]])
+    positions = group_offsets[np.searchsorted(groups, id_groups)] + ids - group_starts[id_groups]
+    wkb = table.column(0).combine_chunks()
+    if isinstance(wkb, pa.ExtensionArray):
+        wkb = wkb.storage
+    return gpd.GeoSeries(shapely.from_wkb(wkb.take(pa.array(positions)).to_numpy(zero_copy_only=False)), index=ids, crs=crs)
+
+
+
+
+
+def fx_with_full_geometry(gdf, full_path=TOTALFIRE_DATA_PATH):
+    #################### ######################################## ######################################## ######################################## ####################
+    # Swaps the simplified geometry of filtered fires for their full detail geometry (for exports and fine display tolerances)
+    #################### ######################################## ######################################## ######################################## ####################
+    gdf = gdf.copy()
+    gdf["geometry"] = fx_read_fire_geometry(gdf.index, full_path).to_crs(gdf.crs).values
+    return gdf
+
+
+
+
+
+_fire_data_lock = threading.Lock()
+
+def fx_get_fire_data(download_from_git):
+    #################### ######################################## ######################################## ######################################## ####################
+    # Makes sure both fire files are on disk. Rebuilds them from an existing full file (older layout or interrupted build),
+    # otherwise tries the prebuilt data on Git if download_from_git is True and falls back to downloading and processing from the source
+    #################### ######################################## ######################################## ######################################## ####################
+    with _fire_data_lock:                                                                       # a second caller waits here instead of starting a second download
+        if fx_fire_files_ready():
+            return
+
+        if TOTALFIRE_DATA_PATH.exists():
+            try:
+                print(f'...... {timenow()} Rebuilding the Fire Data Files From the Existing Dataset (This May Take Up to 15 Minutes)')
+                fx_build_fire_files(gpd.read_parquet(TOTALFIRE_DATA_PATH))
+                return
+            except Exception as exc:
+                print(f'...... {timenow()} Could Not Rebuild From the Existing Dataset ({exc}), Downloading Again')
+                TOTALFIRE_DATA_PATH.unlink(missing_ok=True)
+
+        if download_from_git:
+            print(f'...... {timenow()} Attempting to Download Fire Data from Git')
+            if download_processed_data(FIRE_DATA_GIT_URL, 'TotalFire_data.parquet', PROCESSED_DATA_FOLDER_PATH):
+                try:
+                    print(f'......... {timenow()} Download Sucess, Building the Fire Data Files')
+                    fx_build_fire_files(gpd.read_parquet(TOTALFIRE_DATA_PATH))
+                    return
+                except Exception:
+                    TOTALFIRE_DATA_PATH.unlink(missing_ok=True)
+            print(f'...... {timenow()} Could Not Get Fire Data from Git, Falling Back to the Source')
+
+        if not CAN_PROCESSED_DATA_PATH.exists():
+            print(f'...... {timenow()} The Raw Canada Data Does Not Exist, Downloading Now')
+            fx_download_raw_data('canfire','https://cwfis.cfs.nrcan.gc.ca/downloads/nfdb/fire_poly/current_version/NFDB_poly.zip','NFDB_poly.zip',)    
+            print(f'............ {timenow()} Pre-Processing the Canada Data')  
+            gdf_can_fires = fx_process_canfire_data()
+            print(f'............ {timenow()} Pre-Processing Complete')  
+        else:
+            gdf_can_fires = gpd.read_parquet(CAN_PROCESSED_DATA_PATH)
+
+        if not QC_PROCESSED_DATA_PATH.exists():
+            print(f'...... {timenow()} The Raw Quebec Data Does Not Exist, Downloading Now (This May Take Up to 20 Minutes)')
+            if not QC_AFTER_RAW_DATA_PATH.exists():
+                fx_download_raw_data('qcfires_after76','https://diffusion.mffp.gouv.qc.ca/Diffusion/DonneeGratuite/Foret/PERTURBATIONS_NATURELLES/Feux_foret/02-Donnees/PROV/FEUX_PROV_GPKG.zip','FEUX_PROV_GPKG.zip')
+            if not QC_BEFORE_RAW_DATA_PATH.exists():
+                fx_download_raw_data('qcfires_before76','https://diffusion.mffp.gouv.qc.ca/Diffusion/DonneeGratuite/Foret/PERTURBATIONS_NATURELLES/Feux_foret/02-Donnees/PROV/FEUX_ANCIENS_PROV_GPKG.zip','FEUX_PROV_GPKG.zip')
+            print(f'............ {timenow()} Pre-Processing the QC Data')     
+            gdf_qc_fires = fx_process_qcfire_data()
+            print(f'............ {timenow()} Pre-Processing Complete')  
+        else:
+            gdf_qc_fires = gpd.read_parquet(QC_PROCESSED_DATA_PATH)
+        print(f'.................. {timenow()} Merging All Fire Data and Building the Fire Data Files')   
+        fx_merge_provincial_fires(gdf_qc_fires, gdf_can_fires)
+
+
+
+
+
 def fx_merge_provincial_fires(data1, data2):
     #################### ######################################## ######################################## ######################################## ####################
     # Merges two datasets
@@ -250,7 +401,7 @@ def fx_merge_provincial_fires(data1, data2):
 
     combined_gdf = gpd.GeoDataFrame(combined_gdf, geometry='geometry', crs=data1.crs)
     
-    combined_gdf.to_parquet(TOTALFIRE_DATA_PATH)  
+    fx_build_fire_files(combined_gdf)
     CAN_PROCESSED_DATA_PATH.unlink(missing_ok=True)
     QC_PROCESSED_DATA_PATH.unlink(missing_ok=True)
     return combined_gdf
@@ -360,20 +511,20 @@ def filter_number(value, label, *, integer=False, minimum=0):
 
 
 def fx_filter_fires_data(
-    fire_gdf, watershed_data, provincelist,
+    fire_data, watershed_data, provincelist,
     min_year=None, max_year=None, min_size=None, max_size=None,
     distance_coords=None, distance_radius=None, watershed_name=None,
-    polygon_geojson=None,
+    polygon_geojson=None, geometry_source=None,
 ):
     #################### ######################################## ######################################## ######################################## ####################
     # Applies all user inputed fileters to total_fire dataset and returns the filtered dataset
+    # fire_data is the fires in memory. If its geometry is the simplified display copy, pass the full detail file as geometry_source so
+    # spatial filters test the exact geometry. The returned fires keep fire_data's geometry, use fx_with_full_geometry for full detail
     #################### ######################################## ######################################## ######################################## ####################
     
     # Makes sure province list is a list of provinces to include
     if not isinstance(provincelist, list) or any(not isinstance(p, str) for p in provincelist):
         raise ValueError("Provinces must be a list of province codes.")
-    # Filter the fire data right away based on the province list
-    filtered_gdf = fire_gdf if "ALL" in provincelist else fire_gdf[fire_gdf["province"].isin(provincelist)]
     # Take in year and size inputs
     min_year = filter_number(min_year, "Minimum year", integer=True)
     max_year = filter_number(max_year, "Maximum year", integer=True)
@@ -383,15 +534,9 @@ def fx_filter_fires_data(
     for lower, upper, label in ((min_year, max_year, "year"), (min_size, max_size, "size")):
         if lower is not None and upper is not None and lower > upper:
             raise ValueError(f"Minimum {label} must not exceed maximum {label}.")
-    # Filters based on fire year and fire size
-    for column, lower, upper in (("fire_year", min_year, max_year), ("fire_size", min_size, max_size)):
-        if lower is not None:
-            filtered_gdf = filtered_gdf[filtered_gdf[column] >= lower]
-        if upper is not None:
-            filtered_gdf = filtered_gdf[filtered_gdf[column] <= upper]
 
     # Take in a verify user inputed coords and radius
-    user_point = buffer_deg = watershed_polygon = None
+    user_point = buffer_deg = watershed_polygon = boundary = None
     coords = "" if distance_coords is None else distance_coords
     radius = filter_number(distance_radius, "Radius")
     if not isinstance(coords, str):
@@ -408,11 +553,8 @@ def fx_filter_fires_data(
             raise ValueError("Coordinates must use latitude, longitude within the supported UTM area (-80 to 84 latitude).") from exc
         if radius <= 0:
             raise ValueError("Radius must be greater than zero.")
-        # Filter based on user inputed coords and radius 
         user_point = gpd.GeoSeries([Point(lon, lat)], crs="EPSG:4326")
         buffer_deg = user_point.to_crs(user_point.estimate_utm_crs()).buffer(radius * 1000).to_crs("EPSG:4326")
-        buffer_filter = buffer_deg.to_crs(fire_gdf.crs).iloc[0]
-        filtered_gdf = filtered_gdf[filtered_gdf.geometry.intersects(buffer_filter)]
 
     if watershed_name:
         if not isinstance(watershed_name, str):
@@ -421,15 +563,51 @@ def fx_filter_fires_data(
         if selected_ws.empty:
             raise ValueError(f'No watershed found with name "{watershed_name}".')
         watershed_polygon = selected_ws.geometry.union_all()
-        watershed_filter = gpd.GeoSeries([watershed_polygon], crs=watershed_data.crs).to_crs(fire_gdf.crs).iloc[0]
-        filtered_gdf = filtered_gdf[filtered_gdf.geometry.within(watershed_filter)]
 
     if polygon_geojson is not None:
         boundary = parse_polygon_geojson(polygon_geojson)
-        boundary = gpd.GeoSeries([boundary], crs="EPSG:4326").to_crs(fire_gdf.crs).iloc[0]
-        # Query the spatial index to avoid comparing every fire to a complex boundary.
-        indices = filtered_gdf.sindex.query(boundary, predicate="intersects")
-        filtered_gdf = filtered_gdf.iloc[sorted(indices)]
+
+    # Filter based on the province list, fire year and fire size
+    filtered_gdf = fire_data if "ALL" in provincelist else fire_data[fire_data["province"].isin(provincelist)]
+    for column, lower, upper in (("fire_year", min_year, max_year), ("fire_size", min_size, max_size)):
+        if lower is not None:
+            filtered_gdf = filtered_gdf[filtered_gdf[column] >= lower]
+        if upper is not None:
+            filtered_gdf = filtered_gdf[filtered_gdf[column] <= upper]
+
+    # Spatial filters, all in fire_data's crs
+    spatial = []                                                                                # (shape, predicate) pairs
+    if buffer_deg is not None:
+        spatial.append((buffer_deg.to_crs(fire_data.crs).iloc[0], "intersects"))
+    if watershed_polygon is not None:
+        spatial.append((gpd.GeoSeries([watershed_polygon], crs=watershed_data.crs).to_crs(fire_data.crs).iloc[0], "within"))
+    if boundary is not None:
+        spatial.append((gpd.GeoSeries([boundary], crs="EPSG:4326").to_crs(fire_data.crs).iloc[0], "intersects"))
+
+    if spatial:
+        if geometry_source is not None:
+            # fire_data geometry is simplified: narrow down with the exact bounds, then test the full detail geometry of what's left
+            bounds = filtered_gdf[BBOX_COLUMNS].to_numpy()
+            keep = np.ones(len(filtered_gdf), dtype=bool)
+            for shape_, _ in spatial:
+                minx, miny, maxx, maxy = shape_.bounds
+                keep &= (bounds[:, 0] <= maxx) & (bounds[:, 2] >= minx) & (bounds[:, 1] <= maxy) & (bounds[:, 3] >= miny)
+            filtered_gdf = filtered_gdf[keep]
+            exact = fx_read_fire_geometry(filtered_gdf.index, geometry_source).to_crs(fire_data.crs)
+        else:
+            exact = filtered_gdf.geometry
+        keep = np.ones(len(filtered_gdf), dtype=bool)
+        for shape_, predicate in spatial:
+            if predicate == "within":
+                keep &= exact.within(shape_).to_numpy()
+            else:
+                # Query the spatial index to avoid comparing every fire to a complex boundary.
+                hits = np.zeros(len(exact), dtype=bool)
+                hits[exact.sindex.query(shape_, predicate="intersects")] = True
+                keep &= hits
+        filtered_gdf = filtered_gdf[keep]
+
+    filtered_gdf = filtered_gdf.drop(columns=BBOX_COLUMNS, errors="ignore")
 
     return {
         "filtered_gdf": filtered_gdf.copy(),
