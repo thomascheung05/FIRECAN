@@ -16,6 +16,10 @@ import numpy as np
 import threading
 import pyarrow as pa
 import pyarrow.parquet as pq
+try:
+    import fcntl                                                                                # lets several Gunicorn workers share one download
+except ImportError:                                                                             # Windows, which only runs the dev server
+    fcntl = None
 
 
 
@@ -352,7 +356,9 @@ def fx_get_fire_data(download_from_git):
     # Makes sure both fire files are on disk. Rebuilds them from an existing full file (older layout or interrupted build),
     # otherwise tries the prebuilt data on Git if download_from_git is True and falls back to downloading and processing from the source
     #################### ######################################## ######################################## ######################################## ####################
-    with _fire_data_lock:                                                                       # a second caller waits here instead of starting a second download
+    with _fire_data_lock, open(PROCESSED_DATA_FOLDER_PATH / '.fire_data.lock', 'w') as lock_file:   # a second caller (thread or Gunicorn worker) waits here instead of starting a second download
+        if fcntl:
+            fcntl.flock(lock_file, fcntl.LOCK_EX)
         if fx_fire_files_ready(TOTALFIRE_DATA_PATH, FIRE_DISPLAY_DATA_PATH):
             return
 

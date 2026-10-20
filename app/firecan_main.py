@@ -58,6 +58,10 @@ def prepare_fire_data():
         fire_data_status["state"] = "error"
 
 
+def start_fire_data_loading():
+    # Called once per serving process: by __main__ for the dev server, by gunicorn.conf.py's post_fork hook for each Gunicorn worker
+    threading.Thread(target=prepare_fire_data, daemon=True).start()
+
 
 if WATERSHED_PROCESSED_DATA_PATH.exists() and WATERSHED_PROCESSED_DATA_JSON_PATH.exists():
     print(f'...... {timenow()} Loading in Watershed Data')
@@ -203,7 +207,7 @@ def open_browser():
     webbrowser.open_new(f"http://127.0.0.1:{LOCAL_PORT}")
 
 if __name__ == '__main__':
-    threading.Thread(target=prepare_fire_data, daemon=True).start()
+    start_fire_data_loading()
     threading.Timer(1, open_browser).start()  # small delay so server is up first
     app.run(host="127.0.0.1", port=LOCAL_PORT)
 

@@ -50,6 +50,16 @@ The first time you run the application, it will automatically create a VENV, ins
     *   Click **Export** to download the current filter selection as CSV, GeoJSON, or GeoPackage. Geometry exports keep the original fire boundaries.
     *   Open **About** for help and data-source links.
 
+### Running with Gunicorn
+
+`FIRECAN.sh` uses Flask's development server. To serve the app with Gunicorn instead (macOS/Linux), run from the repo root:
+
+```sh
+venv/bin/gunicorn firecan_main:app
+```
+
+Settings are in `gunicorn.conf.py` (binds to `127.0.0.1:5050`, 1 worker with 8 threads). Override them on the command line, e.g. `gunicorn -b 0.0.0.0:8000 -w 2 firecan_main:app`. Each worker holds its own copy of the fire data in memory, so add workers only if there's RAM for it.
+
 ## Configuration
 
 ### Result Size Limit
