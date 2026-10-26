@@ -10,7 +10,10 @@ from firecan_fx import (
     filter_number, parse_polygon_geojson, POLYGON_MAX_BYTES, TOTALFIRE_DATA_PATH, FIRE_DISPLAY_TOLERANCE_M,
     fx_fire_files_ready, fx_load_fire_display, fx_with_full_geometry,
 )
-from flask import Flask, request, jsonify # type: ignore
+from flask import Flask, request, jsonify, send_file # type: ignore
+from firecan_tiles import (TILE_ROOT, file_identity, dataset_sources, read_manifest, compact_selection)
+from firecan_fx import FIRE_DISPLAY_DATA_PATH
+import os
 import json
 import geopandas as gpd
 import webbrowser
@@ -41,16 +44,21 @@ create_processeddata_folder()
 # Only the simplified copy of the fires is kept in memory, full detail geometry is read from disk for just the fires that need it
 fire_data_status = {"state": "checking"}           # checking -> ready, or checking -> downloading -> ready / error
 gdf_fires = None
+loaded_source_identity = None
 
 
 def prepare_fire_data():
-    global gdf_fires
+    global gdf_fires, loaded_source_identity
     try:
         if not fx_fire_files_ready():
             fire_data_status["state"] = "downloading"
             fx_get_fire_data(DOWNLOAD_FROM_GIT)
         print(f'...... {timenow()} Loading in the Simplified Fire Data')
+        before = (file_identity(TOTALFIRE_DATA_PATH), file_identity(FIRE_DISPLAY_DATA_PATH))
         gdf_fires = fx_load_fire_display()
+        loaded_source_identity = (file_identity(TOTALFIRE_DATA_PATH), file_identity(FIRE_DISPLAY_DATA_PATH))
+        if before != loaded_source_identity:
+            raise ValueError('Dataset changed during loading. Restart after replacing matched artifacts.')
         fire_data_status["state"] = "ready"
         print(f'...... {timenow()} Fire Data Ready')
     except Exception as exc:
@@ -103,6 +111,95 @@ print(timenow(),'.. Data pre-loading complete. The app is now ready to serve req
 app = Flask(__name__, static_folder=str(work_dir / 'static'))                                                     # This starts FLASK which allows me to talk back and forth with my web page and my java script
 # Allow the boundary plus a small amount of JSON filter metadata.
 app.config["MAX_CONTENT_LENGTH"] = POLYGON_MAX_BYTES + 64 * 1024
+app.config['TILE_ROOT'] = os.environ.get('FIRECAN_TILE_ROOT', str(TILE_ROOT))
+# Local correctness and browser targets are recorded in docs/vector-tiles.md.
+app.config['MAP_RENDERER'] = os.environ.get('FIRECAN_MAP_RENDERER', 'tiles')
+
+
+def matched_manifest():
+    if fire_data_status['state'] != 'ready':
+        raise ValueError('Fire data is not ready yet. Check /data_status.')
+    identity = (file_identity(TOTALFIRE_DATA_PATH), file_identity(FIRE_DISPLAY_DATA_PATH))
+    if identity != loaded_source_identity:
+        raise ValueError('The dataset changed. Restart all workers after replacing matched datasets and tiles.')
+    manifest, archive = read_manifest(app.config['TILE_ROOT'])
+    if manifest['sources'] != dataset_sources(TOTALFIRE_DATA_PATH, FIRE_DISPLAY_DATA_PATH) or manifest['record_count'] != len(gdf_fires):
+        raise ValueError('Tiles do not match the loaded dataset. Run scripts/build_tiles.py and restart all workers.')
+    return manifest, archive
+
+
+@app.get('/map_manifest')
+def map_manifest():
+    try:
+        manifest, _ = matched_manifest()
+        response = jsonify(**manifest, archive_url=f"/map_tiles/{manifest['dataset_version']}/fires.pmtiles")
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return jsonify(error=f'Tiles are unavailable: {exc}'), 503
+
+
+@app.route('/map_tiles/<version>/fires.pmtiles', methods=['GET', 'HEAD'])
+def map_tiles(version):
+    if len(version) != 64 or any(c not in '0123456789abcdef' for c in version):
+        return jsonify(error='Unknown tile version.'), 404
+    # Immutable old archives remain usable by already open maps, even after a
+    # new manifest is published. Query IDs are always checked against CURRENT.
+    path = Path(app.config['TILE_ROOT']) / version / 'fires.pmtiles'
+    if not path.is_file():
+        return jsonify(error='Tile archive is missing. Run scripts/build_tiles.py.'), 404
+    response = send_file(path, mimetype='application/vnd.pmtiles', conditional=True, etag=True, max_age=31536000)
+    response.headers['Cache-Control'] = 'public, max-age=31536000, immutable, no-transform'
+    response.headers['Accept-Ranges'] = 'bytes'
+    return response
+
+
+def selection_overlays(results):
+    watershed_polygon = results['watershed_polygon']
+    return {
+        'user_point': json.loads(results['user_point'].to_json()) if results['user_point'] is not None else None,
+        'user_buffer': json.loads(results['buffer_geom'].to_json()) if results['buffer_geom'] is not None else None,
+        'watershed_polygon': json.loads(gpd.GeoSeries([watershed_polygon], crs=gdf_watershed_data.crs).to_crs(4326).to_json()) if watershed_polygon is not None else None,
+    }
+
+
+@app.post('/map_query')
+def map_query():
+    try:
+        if not request.is_json or not isinstance(params := request.get_json(), dict):
+            raise ValueError('Send filters as a JSON object.')
+        if not isinstance(params.get('dataset_version'), str):
+            raise ValueError('Provide dataset_version from /map_manifest.')
+    except (ValueError, TypeError, BadRequest) as exc:
+        return jsonify(error=str(exc) if not isinstance(exc, BadRequest) else 'Could not read the JSON request.'), 400
+    try:
+        manifest, _ = matched_manifest()
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return jsonify(error=f'Tiles are unavailable: {exc}'), 503
+    if params['dataset_version'] != manifest['dataset_version']:
+        return jsonify(error='The map dataset version changed. Reload the page.', dataset_version=manifest['dataset_version']), 409
+    try:
+        results = fx_filter_fires_data(
+            gdf_fires, gdf_watershed_data, params.get('provinces', ['ALL']),
+            **{key: params.get(key) for key in ('min_year', 'max_year', 'min_size', 'max_size', 'distance_coords', 'distance_radius', 'watershed_name', 'polygon_geojson')},
+            geometry_source=TOTALFIRE_DATA_PATH,
+        )
+    except (ValueError, TypeError) as exc:
+        return jsonify(error=str(exc)), 400
+    except OSError:
+        return jsonify(error='The dataset changed during this request. Restart all workers.'), 503
+    try:
+        # Also catch replacement during an original-geometry spatial read.
+        latest, _ = matched_manifest()
+        if latest['dataset_version'] != manifest['dataset_version']:
+            return jsonify(error='The map dataset version changed. Reload the page.'), 409
+        selected = results['filtered_gdf']
+        response = jsonify(dataset_version=manifest['dataset_version'], count=len(selected),
+                           selection=compact_selection(selected.index, len(gdf_fires)), **selection_overlays(results))
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return jsonify(error=f'Tiles are unavailable: {exc}'), 503
 
 
 @app.errorhandler(RequestEntityTooLarge)
@@ -201,7 +298,7 @@ def data_status():
 
 @app.route('/')
 def serve_html():
-    return app.send_static_file('firecan_web.html')
+    return app.send_static_file('firecan_web.html' if app.config['MAP_RENDERER'] == 'tiles' else 'firecan_legacy.html')
 
 def open_browser():
     webbrowser.open_new(f"http://127.0.0.1:{LOCAL_PORT}")

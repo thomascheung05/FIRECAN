@@ -1,0 +1,180 @@
+{
+  "viewport": [
+    1280,
+    800
+  ],
+  "hardware": {
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "machdep.cpu.brand_string": "Apple M4",
+    "hw.memsize": "17179869184",
+    "hw.ncpu": "10"
+  },
+  "cache": "new browser context per case; OS disk cache warm; repeat in same context warm",
+  "basemap": "all external raster requests replaced with a local 1px image; external basemap latency excluded",
+  "headless": true,
+  "results": [
+    {
+      "case": "Canada",
+      "repeat": 0,
+      "cold_national_usable_ms": 2351.600000023842,
+      "cold_national_overlay_bytes": 864308,
+      "cold_filter": {
+        "count": 157093,
+        "mode": "all",
+        "ids": 0,
+        "query_ms": 11,
+        "apply_ms": 339.10000002384186,
+        "total_ms": 350.10000002384186
+      },
+      "warm_filter": {
+        "count": 157093,
+        "mode": "all",
+        "ids": 0,
+        "query_ms": 19.399999976158142,
+        "apply_ms": 584.3999999761581,
+        "total_ms": 603.7999999523163
+      },
+      "js_heap_bytes": 7938828,
+      "browser_rss_bytes": 1354153984,
+      "fps": 59.383842812163714,
+      "map_render_fps": 59.383842812163714,
+      "render_frames": 149,
+      "sample_ms": 2509.1000000000004,
+      "p95_frame_ms": 16.700000000000728,
+      "visible_fragments": 67395,
+      "wrong_ids": 0,
+      "errors": []
+    },
+    {
+      "case": "Quebec",
+      "repeat": 0,
+      "cold_national_usable_ms": 665,
+      "cold_national_overlay_bytes": 864308,
+      "cold_filter": {
+        "count": 113027,
+        "mode": "exclude",
+        "ids": 44066,
+        "query_ms": 287.5,
+        "apply_ms": 1146.7000000476837,
+        "total_ms": 1434.2000000476837
+      },
+      "warm_filter": {
+        "count": 113027,
+        "mode": "exclude",
+        "ids": 44066,
+        "query_ms": 35.39999997615814,
+        "apply_ms": 272.2000000476837,
+        "total_ms": 307.60000002384186
+      },
+      "js_heap_bytes": 11196132,
+      "browser_rss_bytes": 1366589440,
+      "fps": 60.166553771367106,
+      "map_render_fps": 60.166553771367106,
+      "render_frames": 151,
+      "sample_ms": 2509.7,
+      "p95_frame_ms": 16.799999999999727,
+      "visible_fragments": 66213,
+      "wrong_ids": 0,
+      "errors": []
+    },
+    {
+      "case": "Canada 2016\u20132025",
+      "repeat": 0,
+      "cold_national_usable_ms": 522,
+      "cold_national_overlay_bytes": 864308,
+      "cold_filter": {
+        "count": 36977,
+        "mode": "include",
+        "ids": 36977,
+        "query_ms": 15.600000023841858,
+        "apply_ms": 1608.1999999284744,
+        "total_ms": 1623.8999999761581
+      },
+      "warm_filter": {
+        "count": 36977,
+        "mode": "include",
+        "ids": 36977,
+        "query_ms": 12.399999976158142,
+        "apply_ms": 286.3000000715256,
+        "total_ms": 298.7000000476837
+      },
+      "js_heap_bytes": 13618096,
+      "browser_rss_bytes": 1290567680,
+      "fps": 60.20493600733622,
+      "map_render_fps": 60.20493600733622,
+      "render_frames": 151,
+      "sample_ms": 2508.1000000000004,
+      "p95_frame_ms": 16.799999999999727,
+      "visible_fragments": 10606,
+      "wrong_ids": 0,
+      "errors": []
+    },
+    {
+      "case": "Quebec 2016\u20132025",
+      "repeat": 0,
+      "cold_national_usable_ms": 455.2000000476837,
+      "cold_national_overlay_bytes": 864308,
+      "cold_filter": {
+        "count": 25267,
+        "mode": "include",
+        "ids": 25267,
+        "query_ms": 18.399999976158142,
+        "apply_ms": 833,
+        "total_ms": 851.3999999761581
+      },
+      "warm_filter": {
+        "count": 25267,
+        "mode": "include",
+        "ids": 25267,
+        "query_ms": 14.299999952316284,
+        "apply_ms": 281.7000000476837,
+        "total_ms": 296.10000002384186
+      },
+      "js_heap_bytes": 15347852,
+      "browser_rss_bytes": 1256407040,
+      "fps": 60.19773560892809,
+      "map_render_fps": 60.19773560892809,
+      "render_frames": 151,
+      "sample_ms": 2508.399999976158,
+      "p95_frame_ms": 16.700000000000273,
+      "visible_fragments": 10405,
+      "wrong_ids": 0,
+      "errors": []
+    },
+    {
+      "case": "Broad boundary",
+      "repeat": 0,
+      "cold_national_usable_ms": 502.09999990463257,
+      "cold_national_overlay_bytes": 864308,
+      "cold_filter": {
+        "count": 128127,
+        "mode": "exclude",
+        "ids": 28966,
+        "query_ms": 8647.5,
+        "apply_ms": 1161.1000000238419,
+        "total_ms": 9808.600000023842
+      },
+      "warm_filter": {
+        "count": 128127,
+        "mode": "exclude",
+        "ids": 28966,
+        "query_ms": 8171.899999976158,
+        "apply_ms": 343.7999999523163,
+        "total_ms": 8515.699999928474
+      },
+      "js_heap_bytes": 11853276,
+      "browser_rss_bytes": 509263872,
+      "fps": 60.284254230153365,
+      "map_render_fps": 60.284254230153365,
+      "render_frames": 151,
+      "sample_ms": 2504.8000000715256,
+      "p95_frame_ms": 16.700000000000728,
+      "visible_fragments": 67395,
+      "wrong_ids": 0,
+      "errors": []
+    }
+  ],
+  "browser": "156.0.8078.47",
+  "dataset_version": "1f2037da5cbe74a9531aaa90dee8e0836c4e016bd9620cf674f7a16d0ea5690d"
+}

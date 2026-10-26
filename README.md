@@ -2,7 +2,7 @@
 
 FIRECAN is a web-based mapping application that enables users to filter and visualize historical forest fire data across Canada. It processes and serves fire data from Donnees Quebec and the Canadian Wildland Fire Information System (CWFIS), allowing for dynamic exploration on an interactive map.
 
-The backend is built with Python using Flask and GeoPandas for data processing, while the frontend leverages Leaflet.js to render geographic data and provide an interactive user experience. 
+The backend is built with Python using Flask and GeoPandas for data processing, while the main map uses MapLibre GL JS with local PMTiles vector tiles. Leaflet.js remains in the watershed dialog.
 
 ## Features
 
@@ -14,7 +14,7 @@ The backend is built with Python using Flask and GeoPandas for data processing, 
     *   Isolate fires within a specific radius of a coordinate point.
     *   Select fires contained within a specific Quebec watershed.
     *   Upload your own GeoJSON boundary to select fires that overlap or touch it.
-*   **Performance Tuning**: Adjust the polygon tolerance to simplify geometries, reducing load times for large datasets.
+*   **Vector Map**: Browse all Canada automatically. Boundaries gain detail as you zoom; exact counts and original-geometry exports use the analysis datasets.
 *   **Data Export**: Download your filtered dataset in various formats, including GeoJSON, CSV, and GPKG.
 *   **Watershed Explorer**: An interactive map tool to find and select Quebec watersheds for filtering.
 
@@ -43,7 +43,14 @@ The backend is built with Python using Flask and GeoPandas for data processing, 
 The first time you run the application, it will automatically create a VENV, install the requirements and download the necessary fire and watershed data (approximately 2 GB). This process can take up to 15 minutes, with the majority of the time spent on the download. Once processed, the data is saved locally for faster startup on subsequent runs.
 
 
-3.  **Using the Interface:**
+3.  **Build the local map tiles once the datasets are ready:**
+    ```sh
+    brew install tippecanoe  # macOS; see the guide for other platforms
+    venv/bin/python scripts/build_tiles.py
+    ```
+    Reload the page when the build completes. Tiles are never built on ordinary startup. See [tile generation, readiness, refreshes, checks, and benchmark results](docs/vector-tiles.md).
+
+4.  **Using the Interface:**
     *   The app opens at **http://127.0.0.1:5050**. You can paste this address into Chrome or another browser.
     *   Use the floating Filters panel to set your desired filters. Collapse it to see more of the map.
     *   Click the **"Filter Map"** button to apply the filters and display the corresponding fire polygons on the map.
@@ -64,7 +71,7 @@ Settings are in `gunicorn.conf.py` (binds to `127.0.0.1:5050`, 1 worker with 8 t
 
 ### Result Size Limit
 
-Large map results and geometry exports have a 100 MB response limit. To adjust this, you can change the `MAX_SIZE_MB` variable at the top of the `app/firecan_main.py` file.
+Legacy GeoJSON map results and geometry exports have a 100 MB response limit. The default tiled map bypasses the large GeoJSON display response and loads the national selection automatically. To adjust this, you can change the `MAX_SIZE_MB` variable at the top of the `app/firecan_main.py` file.
 
 ```python
 # firecan_main.py
@@ -86,7 +93,7 @@ FIRECAN utilizes publicly available data from the following sources:
 *   `requirements.txt`: A list of Python dependencies required for the project.
 *   `static/`: Directory containing all frontend assets.
     *   `firecan_web.html`: The single-page HTML structure for the application.
-    *   `firecan_logic.js`: Core frontend JavaScript for handling user interactions, API calls to the backend, and map rendering with Leaflet.
+    *   `firecan_logic.js`: Core frontend JavaScript for interactions, exact query requests, and the Leaflet watershed dialog. `firecan_map.js` handles MapLibre/PMTiles display; `firecan_legacy.*` preserves the temporary rollback renderer.
     *   `firecan_style.css`: Custom CSS for styling the web application.
     *   `leaflet.js` & `leaflet.css`: The Leaflet library files for the interactive map.
   
@@ -99,7 +106,7 @@ Under **Your boundary**, choose a `.geojson` or `.json` file up to 10 MB. The fi
 
 FIRECAN validates the boundary, previews it in cyan, and zooms to it. Click **Filter Map** to apply it. Matching includes fires that overlap or touch the boundary, combined with other active filters. It selects whole fire records rather than clipping their geometry or recalculating area. The same filters apply to exports.
 
-Choose another file to replace the boundary, or click **Remove**. Invalid replacements keep the previous boundary. **Reset** clears the boundary and results and restores All provinces and the 50-metre display tolerance. Uploads remain temporary and are not saved on disk.
+Choose another file to replace the boundary, or click **Remove**. Invalid replacements keep the previous boundary. **Reset** clears the boundary and filters and restores the national overview with all fires. Map detail adjusts with zoom. Uploads remain temporary and are not saved on disk.
 
 ## API and focused checks
 
@@ -114,3 +121,7 @@ venv/bin/python -m unittest discover -s tests -v
 ```
 
 They use small synthetic datasets and do not load or download the historical fire dataset.
+
+## Vector map maintenance and rollout
+
+The tiled renderer is the default after local correctness and overlay targets passed. `FIRECAN_MAP_RENDERER=legacy` temporarily restores the previous map. First-run analysis downloads remain unchanged; tile preparation is an explicit local maintenance step. [Read the tile guide](docs/vector-tiles.md) for dependencies, versioned APIs, matched dataset replacement, multi-worker readiness, regression checks, reproducible benchmarks, recorded before/after results, and remaining limits.

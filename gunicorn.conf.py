@@ -15,8 +15,10 @@ worker_class = 'gthread'
 threads = 8
 timeout = 120                   # large exports read full detail geometry from disk and can take a while
 
-# Load the app (and the watershed data) once in the master before forking, so workers don't all download it on first run
-preload_app = True
+# Arrow/GEOS native libraries initialized before fork can crash on macOS.
+# Linux retains preloading to share watershed memory. Prepare local watershed
+# files before starting multiple non-preloaded workers on a fresh installation.
+preload_app = sys.platform != 'darwin'
 
 
 def post_fork(server, worker):

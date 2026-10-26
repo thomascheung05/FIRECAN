@@ -1,0 +1,40 @@
+{
+  "dataset_version": "1f2037da5cbe74a9531aaa90dee8e0836c4e016bd9620cf674f7a16d0ea5690d",
+  "results": [
+    {
+      "case": "Canada",
+      "count": 157093,
+      "mode": "all",
+      "ids": 0,
+      "query_json_bytes": 200
+    },
+    {
+      "case": "Quebec",
+      "count": 113027,
+      "mode": "exclude",
+      "ids": 44066,
+      "query_json_bytes": 254745
+    },
+    {
+      "case": "Canada 2016\u20132025",
+      "count": 36977,
+      "mode": "include",
+      "ids": 36977,
+      "query_json_bytes": 231186
+    },
+    {
+      "case": "Quebec 2016\u20132025",
+      "count": 25267,
+      "mode": "include",
+      "ids": 25267,
+      "query_json_bytes": 163353
+    },
+    {
+      "case": "Broad boundary",
+      "count": 128127,
+      "mode": "exclude",
+      "ids": 28966,
+      "query_json_bytes": 166510
+    }
+  ]
+}

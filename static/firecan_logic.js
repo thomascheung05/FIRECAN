@@ -1,97 +1,6 @@
 "use strict";
-
- var Esrimap = L.tileLayer(
-  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-  { maxZoom: 18, attribution: 'Tiles © Esri', name: "Esrimap"  }
-); 
-var OpenStreetMap_Mapnik = L.tileLayer(
-  'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-  { maxZoom: 19, attribution: '© OpenStreetMap contributors', name: "OpenStreetMap_Mapnik" }
-); 
-var OpenCycleMap = L.tileLayer(
-  'https://tile.thunderforest.com/cycle/{z}/{x}/{y}.png?apikey=17dc0c0df61f47d4b13d3520ec5b1557',
-  { maxZoom: 19, attribution: '© OpenStreetMap contributors', name: "OpenCycleMap" }
-); 
-var Transport = L.tileLayer(
-  'https://tile.thunderforest.com/transport/{z}/{x}/{y}.png?apikey=17dc0c0df61f47d4b13d3520ec5b1557',
-  { maxZoom: 19, attribution: '© OpenStreetMap contributors', name: "Transport" }
-); 
-var Landscape = L.tileLayer(
-  'https://tile.thunderforest.com/landscape/{z}/{x}/{y}.png?apikey=17dc0c0df61f47d4b13d3520ec5b1557',
-  { maxZoom: 19, attribution: '© OpenStreetMap contributors', name: "Landscape" }
-); 
-var Outdoors = L.tileLayer(
-  'https://tile.thunderforest.com/outdoors/{z}/{x}/{y}.png?apikey=17dc0c0df61f47d4b13d3520ec5b1557',
-  { maxZoom: 19, attribution: '© OpenStreetMap contributors', name: "Outdoors" }
-); 
-var SpinalMap = L.tileLayer(
-  'https://tile.thunderforest.com/spinal-map/{z}/{x}/{y}.png?apikey=17dc0c0df61f47d4b13d3520ec5b1557',
-  { maxZoom: 19, attribution: '© OpenStreetMap contributors', name: "SpinalMap" }
-); 
-var TransportDark = L.tileLayer(
-  'https://tile.thunderforest.com/transport-dark/{z}/{x}/{y}.png?apikey=17dc0c0df61f47d4b13d3520ec5b1557',
-  { maxZoom: 19, attribution: '© OpenStreetMap contributors', name: "TransportDark" }
-); 
-var Pioneer = L.tileLayer(
-  'https://tile.thunderforest.com/pioneer/{z}/{x}/{y}.png?apikey=17dc0c0df61f47d4b13d3520ec5b1557',
-  { maxZoom: 19, attribution: '© OpenStreetMap contributors', name: "Pioneer" }
-); 
-var MobileAtlas = L.tileLayer(
-  'https://tile.thunderforest.com/mobile-atlas/{z}/{x}/{y}.png?apikey=17dc0c0df61f47d4b13d3520ec5b1557',
-  { maxZoom: 19, attribution: '© OpenStreetMap contributors', name: "MobileAtlas" }
-); 
-var Neighbourhood = L.tileLayer(
-  'https://tile.thunderforest.com/neighbourhood/{z}/{x}/{y}.png?apikey=17dc0c0df61f47d4b13d3520ec5b1557',
-  { maxZoom: 19, attribution: '© OpenStreetMap contributors', name: "Neighbourhood" }
-); 
-
-
-
-
 const $ = id => document.getElementById(id);
-// Listen before adding the tiles, including when imagery is already cached.
-let startupFinished = false;
-let startupTimer;
-function finishMapStartup() {
-  if (startupFinished) return;
-  startupFinished = true;
-  clearTimeout(startupTimer);
-  Esrimap.off('load', finishMapStartup);
-  requestAnimationFrame(() => {
-    $('map').classList.add('map-ready');
-    $('map').setAttribute('aria-busy', 'false');
-    $('mapStartup').hidden = true;
-  });
-}
-Esrimap.on('load', finishMapStartup);
-const map = L.map('map', { center: [58, -96], zoom: 4, layers: [Esrimap], zoomControl: false });
-// Recheck after layout and whenever the container changes, including browser
-// restoration and mobile viewport changes that do not fire a window resize.
-let mapSizeFrame;
-function syncMapSize() {
-  cancelAnimationFrame(mapSizeFrame);
-  mapSizeFrame = requestAnimationFrame(() => {
-    map.invalidateSize({ pan: false, debounceMoveend: true });
-  });
-}
-const mapSizeObserver = new ResizeObserver(syncMapSize);
-mapSizeObserver.observe($('map'));
-window.addEventListener('load', syncMapSize);
-window.addEventListener('pageshow', syncMapSize);
-syncMapSize();
-// A slow tile service must not leave the map hidden indefinitely.
-startupTimer = setTimeout(finishMapStartup, 4000);
-L.control.zoom({ position: 'topright' }).addTo(map);
-L.control.layers({
-  'Satellite': Esrimap, 'OpenStreetMap': OpenStreetMap_Mapnik,
-  'Cycle': OpenCycleMap, 'Transport': Transport, 'Landscape': Landscape,
-  'Outdoors': Outdoors, 'Spinal': SpinalMap, 'Transport dark': TransportDark,
-  'Pioneer': Pioneer, 'Mobile atlas': MobileAtlas, 'Neighbourhood': Neighbourhood,
-}, null, { position: 'topright', collapsed: true }).addTo(map);
-L.control.scale({ position: 'bottomright', imperial: false }).addTo(map);
-
-let resultsLayer = null;
-let boundaryLayer = null;
+let mainMap;
 let polygonDocument = null;
 let busy = false;
 let watershedMap = null;
@@ -102,7 +11,7 @@ function setPanelOpen(open) {
   $('filterPanel').hidden = !open;
   $('filterToggle').setAttribute('aria-expanded', String(open));
   if (!open && $('filterPanel').contains(document.activeElement)) $('filterToggle').focus();
-  map.invalidateSize();
+  FireMap.resize();
 }
 $('filterToggle').addEventListener('click', () => setPanelOpen($('filterPanel').hidden));
 $('collapseFilters').addEventListener('click', () => setPanelOpen(false));
@@ -133,7 +42,8 @@ function setBusy(active, message = 'Loading fires…') {
   $('loadingMessage').hidden = !active;
   $('loadingText').textContent = message;
   $('filterPanel').setAttribute('aria-busy', String(active));
-  for (const id of ['polygonFile', 'removePolygon', 'clearFilters']) $(id).disabled = active;
+  for (const id of ['polygonFile', 'removePolygon']) $(id).disabled = active || !fireDataReady;
+  $('clearFilters').disabled = !fireDataReady || (active && message !== 'Loading fires…');
   for (const id of ['filterButton', 'saveButton', 'downloadButton']) $(id).disabled = active || !fireDataReady;
 }
 let dataStatusTimer;
@@ -146,44 +56,48 @@ function showDataStatus(message, { spinner = false, error = false, dismissable =
   $('dataStatus').hidden = false;
 }
 $('dataStatusClose').addEventListener('click', () => { $('dataStatus').hidden = true; });
-async function watchFireData(sawDownload = false) {
-  let state = 'checking';
-  try { state = (await (await fetch('/data_status')).json()).state; } catch { /* Server busy or restarting; check again. */ }
-  if (state === 'ready') {
-    fireDataReady = true;
-    setBusy(busy);
-    if (sawDownload) {
-      showDataStatus('Fire data is ready. You can now filter and export fires.', { dismissable: true });
-      dataStatusTimer = setTimeout(() => { $('dataStatus').hidden = true; }, 10000);
+let mapManifest = null;
+let queryController = null;
+let queryGeneration = 0;
+async function watchFireData() {
+  try {
+    const response = await fetch('/data_status');
+    if (!response.ok) throw new Error('Could not check fire data readiness.');
+    const { state } = await response.json();
+    if (state === 'error') throw new Error('Could not prepare fire data. Check the terminal and restart the app.');
+    if (state !== 'ready') {
+      showDataStatus('Preparing fire data. The first download can take up to 15 minutes.', { spinner: true });
+      setTimeout(watchFireData, 3000);
+      return;
     }
-    return;
+    const metadataResponse = await fetch('/map_manifest', { cache: 'no-store' });
+    const metadata = await metadataResponse.json();
+    if (!metadataResponse.ok) throw new Error(metadata.error || 'Local fire tiles are unavailable.');
+    mapManifest = metadata;
+    await FireMap.loadArchive(metadata);
+    fireDataReady = true;
+    $('dataStatus').hidden = true;
+    setBusy(false);
+    await loadFilteredData();
+  } catch (error) {
+    showDataStatus(error.message, { error: true });
   }
-  if (state === 'error') {
-    showDataStatus("Couldn't download the fire data. Check the terminal for details and restart the app.", { error: true });
-    return;
-  }
-  if (state === 'downloading') {
-    sawDownload = true;
-    showDataStatus('Downloading and processing fire data. On first run this can take up to 15 minutes; filtering unlocks when it finishes.', { spinner: true });
-  }
-  setTimeout(() => watchFireData(sawDownload), 5000);
 }
 setBusy(false);
-watchFireData();
 function collectFilters() {
   const fields = {
     min_year: 'minYear', max_year: 'maxYear', min_size: 'minSize', max_size: 'maxSize',
     distance_coords: 'distanceCoords', distance_radius: 'distanceRadius',
-    watershed_name: 'watershedName', polygon_tol: 'polygonTol',
+    watershed_name: 'watershedName',
   };
   const filters = Object.fromEntries(Object.entries(fields).map(([key, id]) => [key, $(id).value.trim()]));
   filters.provinces = Array.from(document.querySelectorAll('#provincecheckboxes input:checked'), input => input.value);
   if (polygonDocument !== null) filters.polygon_geojson = polygonDocument;
   return filters;
 }
-async function postJSON(url, body) {
+async function postJSON(url, body, signal) {
   const response = await fetch(url, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    signal, method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   });
   if (!response.ok) {
     let message = `Request failed (${response.status}). Please try again.`;
@@ -206,32 +120,24 @@ function popupDetails(properties) {
 }
 async function loadFilteredData(event) {
   if (event) event.preventDefault();
-  if (busy) return;
+  if (!fireDataReady) return;
+  queryController?.abort();
+  const generation = ++queryGeneration;
+  queryController = new AbortController();
   $('errorMessage').hidden = true;
   setBusy(true);
   try {
-    const response = await postJSON('/fx_main', collectFilters());
+    const start = performance.now();
+    const response = await postJSON('/map_query', { ...collectFilters(), dataset_version: mapManifest.dataset_version }, queryController.signal);
     const data = await response.json();
-    // Build the replacement before removing existing results so failures preserve them.
-    const layers = [L.geoJSON(data.fires, {
-      style: { color: '#ed8956', weight: 1.5, fillColor: '#d8542c', fillOpacity: .42 },
-      onEachFeature: (feature, layer) => layer.bindPopup(popupDetails(feature.properties || {})),
-    })];
-    if (data.user_buffer) layers.push(L.geoJSON(data.user_buffer, { style: { color: '#c4e8d5', weight: 2, fillOpacity: .08 } }));
-    if (data.user_point) layers.push(L.geoJSON(data.user_point, {
-      pointToLayer: (feature, latlng) => L.marker(latlng, { icon: L.divIcon({ className: 'point-marker', iconSize: [12, 12] }) }),
-    }));
-    if (data.watershed_polygon) layers.push(L.geoJSON(data.watershed_polygon, { style: { color: '#a7bbeb', weight: 2, fillOpacity: .07 } }));
-    const replacement = L.layerGroup(layers).addTo(map);
-    if (resultsLayer) map.removeLayer(resultsLayer);
-    resultsLayer = replacement;
-    if (boundaryLayer) boundaryLayer.bringToFront();
-    const count = data.fires.features.length;
-    $('foundMessage').textContent = `${count.toLocaleString()} ${count === 1 ? 'fire' : 'fires'} matched.`;
+    if (generation !== queryGeneration) return;
+    FireMap.apply(data);
+    window.firecanLastQueryMs = performance.now() - start;
+    $('foundMessage').textContent = data.count ? `${data.count.toLocaleString()} ${data.count === 1 ? 'fire' : 'fires'} matched.` : 'No fires match these filters.';
   } catch (error) {
-    showError(error.message);
+    if (generation === queryGeneration && error.name !== 'AbortError') showError(error.message + ' Previous selection kept.');
   } finally {
-    setBusy(false);
+    if (generation === queryGeneration) setBusy(false);
   }
 }
 $('filterForm').addEventListener('submit', loadFilteredData);
@@ -248,16 +154,10 @@ $('polygonFile').addEventListener('change', async event => {
     try { document = JSON.parse(await file.text()); } catch { throw new Error('Could not read the file. Choose valid GeoJSON.'); }
     const response = await postJSON('/validate_polygon', { polygon_geojson: document });
     const data = await response.json();
-    const preview = L.geoJSON(data.geometry, { style: { color: '#72d5d9', weight: 2, fillOpacity: .06 }, interactive: false });
-    const bounds = preview.getBounds();
-    if (!bounds.isValid()) throw new Error('Boundary has no displayable geometry.');
-    preview.addTo(map);
-    if (boundaryLayer) map.removeLayer(boundaryLayer);
-    boundaryLayer = preview;
+    FireMap.boundary(data.geometry);
     polygonDocument = document;
     $('polygonStatus').textContent = `${file.name} · ready to filter.`;
     $('removePolygon').hidden = false;
-    map.fitBounds(bounds, { paddingTopLeft: [$('filterPanel').hidden ? 20 : Math.min(360, map.getSize().x / 2), 80], paddingBottomRight: [35, 35], maxZoom: 12 });
   } catch (error) {
     showError(error.message + (polygonDocument ? ' Previous boundary kept.' : ''));
   } finally {
@@ -267,8 +167,7 @@ $('polygonFile').addEventListener('change', async event => {
   }
 });
 function removePolygon() {
-  if (boundaryLayer) map.removeLayer(boundaryLayer);
-  boundaryLayer = null;
+  if (mapManifest) FireMap.boundary(null);
   polygonDocument = null;
   $('polygonFile').value = '';
   $('polygonStatus').textContent = 'No boundary selected.';
@@ -278,14 +177,14 @@ $('removePolygon').addEventListener('click', () => {
   if (!busy) { removePolygon(); $('errorMessage').hidden = true; }
 });
 $('clearFilters').addEventListener('click', () => {
-  if (busy) return;
+  queryController?.abort();
+  ++queryGeneration;
   $('filterForm').reset();
   removePolygon();
   $('downloadFormat').value = 'csv';
   $('errorMessage').hidden = true;
-  if (resultsLayer) map.removeLayer(resultsLayer);
-  resultsLayer = null;
-  $('foundMessage').textContent = 'Set filters to explore fires.';
+  FireMap.resetView();
+  loadFilteredData();
 });
 $('provincecheckboxes').addEventListener('change', event => {
   const all = $('ALLcheckbox');
@@ -372,8 +271,19 @@ $('watershedExplorerButton').addEventListener('click', async () => {
     watershedLoading = false;
   }
 });
-map.on('click', event => {
-  const content = document.createElement('div');
-  content.textContent = `${event.latlng.lat.toFixed(6)}, ${event.latlng.lng.toFixed(6)}`;
-  L.popup().setLatLng(event.latlng).setContent(content).openOn(map);
-});
+try {
+  mainMap = FireMap.initialize((features, coordinates) => {
+    if (features.length) return popupDetails(features[0].properties || {});
+    const content = document.createElement('div');
+    content.textContent = `${coordinates.lat.toFixed(6)}, ${coordinates.lng.toFixed(6)}`;
+    return content;
+  }, message => showDataStatus(message, { error: true, dismissable: true }));
+  const observer = new ResizeObserver(() => FireMap.resize());
+  observer.observe($('map'));
+  window.addEventListener('pageshow', () => FireMap.resize());
+  watchFireData();
+} catch (error) {
+  $('mapStartup').hidden = true;
+  $('map').setAttribute('aria-busy', 'false');
+  showDataStatus(error.message, { error: true });
+}

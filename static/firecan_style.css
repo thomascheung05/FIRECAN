@@ -126,3 +126,10 @@ a { color: #f0a779; }
   transform: skewY(-18deg);
   box-shadow: 0 4px 0 -1px #231816, 0 4px 0 0 #d4b7a7, 0 8px 0 -1px #231816, 0 8px 0 0 #d4b7a7;
 }
+.basemap-chooser { width: 125px; color: #efe0d6; background: #231816ed; border: 1px solid #795244; padding: 8px; border-radius: 6px; font-size: 12px; }
+.maplibregl-popup-content { color: #f3e9e3; background: #2b1c17; border-radius: 7px; padding: 14px; line-height: 1.7; }
+.maplibregl-popup-content h3 { margin: 0 0 6px; font-size: 13px; }
+.maplibregl-popup-tip { border-top-color: #2b1c17 !important; }
+.maplibregl-popup-close-button { padding: 0 4px; }
+.maplibregl-ctrl-scale { background: #231816cc; color: #f3e9e3; border-color: #d8bcab; }
+.maplibregl-ctrl-attrib { font-size: 10px; }

@@ -7,3 +7,6 @@ venv/
 .venv312/
 .DS_Store
 app/test
+*.pmtiles
+*.geojsonseq
+benchmark-results*.json

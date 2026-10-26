@@ -6,8 +6,12 @@
   <meta name="theme-color" content="#231816">
   <title>FIRECAN · Historical fire explorer</title>
   <link rel="stylesheet" href="/static/leaflet.css">
+  <link rel="stylesheet" href="/static/vendor/maplibre-gl.css">
   <link rel="stylesheet" href="/static/firecan_style.css">
   <script defer src="/static/leaflet.js"></script>
+  <script defer src="/static/vendor/maplibre-gl.js"></script>
+  <script defer src="/static/vendor/pmtiles.js"></script>
+  <script defer src="/static/firecan_map.js"></script>
   <script defer src="/static/firecan_logic.js"></script>
 </head>
 <body>
@@ -70,7 +74,7 @@
             <label for="watershedName">Watershed name<input id="watershedName" type="text" placeholder="e.g. YAMASKA"></label>
             <button id="watershedExplorerButton" type="button" class="secondary wide">Browse watersheds</button>
           </fieldset>
-          <details class="display-options"><summary>Display detail</summary><label for="polygonTol">Simplification tolerance <span class="unit">m</span><input id="polygonTol" type="number" min="0" step="any" value="50"></label><p class="hint">Lower values show more detail. Exports keep the original geometry.</p></details>
+          <p class="hint display-options">Map detail adjusts as you zoom. Counts include every matching record; exports keep original geometry.</p>
         </div>
         <footer class="panel-footer">
           <div class="action-row"><button id="filterButton" class="primary" type="submit">Filter Map</button><button id="saveButton" type="button" class="secondary">Export</button></div>
@@ -85,7 +89,7 @@
     <div class="dialog-heading"><h2 id="aboutTitle">A record of Canada's fires</h2><button type="button" class="icon-button" data-close aria-label="Close About">×</button></div>
     <p>FIRECAN explores historical forest fire perimeters across Canada. Select filters, then choose <strong>Filter Map</strong>. Click a fire for its year, area, and data source.</p>
     <p>Upload a longitude/latitude GeoJSON boundary to include fires that overlap or touch it. Multiple polygon features act as one search area. Other active filters narrow the selection further; watershed filtering includes fully contained fires.</p>
-    <p>Exports use the current filter settings and retain complete fire boundaries. Lower display tolerance shows more detail; increase it or narrow your filters if map results exceed the 100 MB display limit.</p>
+    <p>Exports use the current filter settings and retain complete fire boundaries. Map boundaries gain detail as you zoom; exact counts include fires too small to see at the current scale.</p>
     <p class="hint">Historical records vary in coverage and completeness. Consult the source datasets for their details.</p>
     <h3>Data sources</h3>
     <ul class="source-list">

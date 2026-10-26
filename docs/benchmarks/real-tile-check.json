@@ -1,0 +1,42 @@
+{
+  "dataset_version": "1f2037da5cbe74a9531aaa90dee8e0836c4e016bd9620cf674f7a16d0ea5690d",
+  "rare_year": 1969,
+  "samples": [
+    {
+      "id": 9954,
+      "year": 2022,
+      "size_ha": 0.00099424,
+      "fragments_at_z14": 1
+    },
+    {
+      "id": 9968,
+      "year": 2014,
+      "size_ha": 0.001,
+      "fragments_at_z14": 1
+    },
+    {
+      "id": 10007,
+      "year": 2021,
+      "size_ha": 0.001,
+      "fragments_at_z14": 1
+    },
+    {
+      "id": 10024,
+      "year": 2022,
+      "size_ha": 0.00099425,
+      "fragments_at_z14": 2
+    },
+    {
+      "id": 10071,
+      "year": 2022,
+      "size_ha": 0.00099426,
+      "fragments_at_z14": 1
+    },
+    {
+      "id": 138879,
+      "year": 1969,
+      "size_ha": 128.9,
+      "fragments_at_z14": 5
+    }
+  ]
+}

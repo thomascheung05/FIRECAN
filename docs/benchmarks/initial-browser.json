@@ -1,0 +1,160 @@
+{
+  "viewport": [
+    1280,
+    800
+  ],
+  "hardware": {
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "machdep.cpu.brand_string": "Apple M4",
+    "hw.memsize": "17179869184",
+    "hw.ncpu": "10"
+  },
+  "cache": "new browser context per case; OS disk cache warm; repeat in same context warm",
+  "basemap": "all external raster requests replaced with a local 1px image; external basemap latency excluded",
+  "headless": true,
+  "results": [
+    {
+      "case": "Canada",
+      "repeat": 0,
+      "cold_national_usable_ms": 1525.2999999523163,
+      "cold_national_overlay_bytes": 864308,
+      "cold_filter": {
+        "count": 157093,
+        "mode": "all",
+        "ids": 0,
+        "query_ms": 7.199999928474426,
+        "apply_ms": 339.5,
+        "total_ms": 346.6999999284744
+      },
+      "warm_filter": {
+        "count": 157093,
+        "mode": "all",
+        "ids": 0,
+        "query_ms": 13.100000023841858,
+        "apply_ms": 596.6999999284744,
+        "total_ms": 609.7999999523163
+      },
+      "js_heap_bytes": 9709420,
+      "fps": 60.176144742133154,
+      "p95_frame_ms": 16.700000000000728,
+      "visible_fragments": 67395,
+      "wrong_ids": 0,
+      "errors": []
+    },
+    {
+      "case": "Quebec",
+      "repeat": 0,
+      "cold_national_usable_ms": 465.59999990463257,
+      "cold_national_overlay_bytes": 864308,
+      "cold_filter": {
+        "count": 113027,
+        "mode": "exclude",
+        "ids": 44066,
+        "query_ms": 44.39999997615814,
+        "apply_ms": 1098.6000000238419,
+        "total_ms": 1143
+      },
+      "warm_filter": {
+        "count": 113027,
+        "mode": "exclude",
+        "ids": 44066,
+        "query_ms": 31.799999952316284,
+        "apply_ms": 276.2999999523163,
+        "total_ms": 308.09999990463257
+      },
+      "js_heap_bytes": 13751208,
+      "fps": 60.19773560778375,
+      "p95_frame_ms": 16.800000000000182,
+      "visible_fragments": 66213,
+      "wrong_ids": 0,
+      "errors": []
+    },
+    {
+      "case": "Canada 2016\u20132025",
+      "repeat": 0,
+      "cold_national_usable_ms": 458.1999999284744,
+      "cold_national_overlay_bytes": 864308,
+      "cold_filter": {
+        "count": 36977,
+        "mode": "include",
+        "ids": 36977,
+        "query_ms": 9.600000023841858,
+        "apply_ms": 1132.6000000238419,
+        "total_ms": 1142.2000000476837
+      },
+      "warm_filter": {
+        "count": 36977,
+        "mode": "include",
+        "ids": 36977,
+        "query_ms": 23.700000047683716,
+        "apply_ms": 281.39999997615814,
+        "total_ms": 305.10000002384186
+      },
+      "js_heap_bytes": 11725804,
+      "fps": 60.18573876997888,
+      "p95_frame_ms": 16.700000000000273,
+      "visible_fragments": 10606,
+      "wrong_ids": 0,
+      "errors": []
+    },
+    {
+      "case": "Quebec 2016\u20132025",
+      "repeat": 0,
+      "cold_national_usable_ms": 673,
+      "cold_national_overlay_bytes": 864308,
+      "cold_filter": {
+        "count": 25267,
+        "mode": "include",
+        "ids": 25267,
+        "query_ms": 19.09999990463257,
+        "apply_ms": 687.1000000238419,
+        "total_ms": 706.1999999284744
+      },
+      "warm_filter": {
+        "count": 25267,
+        "mode": "include",
+        "ids": 25267,
+        "query_ms": 18,
+        "apply_ms": 275.2000000476837,
+        "total_ms": 293.2000000476837
+      },
+      "js_heap_bytes": 13204688,
+      "fps": 60.18333997494229,
+      "p95_frame_ms": 16.799999999999727,
+      "visible_fragments": 10405,
+      "wrong_ids": 0,
+      "errors": []
+    },
+    {
+      "case": "Broad boundary",
+      "repeat": 0,
+      "cold_national_usable_ms": 473.2999999523163,
+      "cold_national_overlay_bytes": 864308,
+      "cold_filter": {
+        "count": 128127,
+        "mode": "exclude",
+        "ids": 28966,
+        "query_ms": 8959.5,
+        "apply_ms": 1061.7000000476837,
+        "total_ms": 10021.200000047684
+      },
+      "warm_filter": {
+        "count": 128127,
+        "mode": "exclude",
+        "ids": 28966,
+        "query_ms": 10654.700000047684,
+        "apply_ms": 341.1999999284744,
+        "total_ms": 10995.899999976158
+      },
+      "js_heap_bytes": 12540428,
+      "fps": 59.9664188054689,
+      "p95_frame_ms": 16.700000000000728,
+      "visible_fragments": 67395,
+      "wrong_ids": 0,
+      "errors": []
+    }
+  ],
+  "browser": "155.0.8059.85",
+  "dataset_version": "1f2037da5cbe74a9531aaa90dee8e0836c4e016bd9620cf674f7a16d0ea5690d"
+}
