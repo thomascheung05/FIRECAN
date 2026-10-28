@@ -1,15 +1,13 @@
-FROM python:3.12.16 AS builder
+FROM python:3.12-slim
 
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
 WORKDIR /app
 
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt gunicorn
 
-RUN python -m venv .venv
-COPY requirements.txt ./
-RUN .venv/bin/pip install -r requirements.txt
-FROM python:3.12.16-slim
-WORKDIR /app
-COPY --from=builder /app/.venv .venv/
 COPY . .
-CMD ["/app/.venv/bin/flask", "run", "--host=0.0.0.0", "--port=8080"]
+
+RUN mkdir -p /data && rm -rf /app/data && ln -s /data /app/data
+
+ENV PORT=8080
+CMD gunicorn -w 1 -k gthread --threads 4 --timeout 300 -b 0.0.0.0:${PORT} firecan_main:app
