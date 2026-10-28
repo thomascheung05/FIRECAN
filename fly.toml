@@ -1,23 +1,31 @@
-# fly.toml app configuration file generated for firecan on 2026-10-28T04:33:39Z
-#
-# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
-#
-
-app = 'firecan'
-primary_region = 'ams'
+app = "firecan"
+primary_region = "yul"
 
 [build]
+
+[env]
+  PORT = "8080"
+
+[mounts]
+  source = "firecan_data"
+  destination = "/data"
 
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = 'stop'
   auto_start_machines = true
-  min_machines_running = 0
-  processes = ['app']
+  auto_stop_machines = "off"
+  min_machines_running = 1
+  processes = ["app"]
+
+  [[http_service.checks]]
+    grace_period = "900s"
+    interval = "30s"
+    method = "GET"
+    path = "/"
+    timeout = "5s"
 
 [[vm]]
-  memory = '1gb'
-  cpu_kind = 'shared'
+  cpu_kind = "shared"
   cpus = 1
-  memory_mb = 2048
+  memory = "2gb"
