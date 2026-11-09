@@ -101,7 +101,11 @@ a { color: #ff6b6b; }
 .leaflet-control-layers, .leaflet-bar a { background: #141414ed; color: #e8e8e8; border-color: #ffffff1a; }
 .leaflet-bar a:hover { background: #3a1a1a; color: white; }
 .leaflet-control-layers { border-radius: 8px; }
-.leaflet-control-layers label { color: #e8e8e8; font-size: 12px; }
+.leaflet-control-layers label { color: #e8e8e8; font-size: 12px; margin: 0; }
+.leaflet-control-layers label > span { display: flex; align-items: center; gap: 7px; padding: 3px 2px; cursor: pointer; }
+/* Undo the full-width text-input styling so radios sit beside their label. */
+.leaflet-control-layers input[type="radio"] { display: inline-block; width: 13px; height: 13px; margin: 0; padding: 0; flex: none; accent-color: #b71c1c; }
+.leaflet-control-layers-base { max-height: 60vh; overflow-y: auto; scrollbar-width: thin; }
 .leaflet-container { font-family: inherit; }
 .leaflet-control-scale-line { background: #141414cc; color: #ececec; border-color: #b0b0b0; }
 .leaflet-container .leaflet-control-attribution { background: #141414cc; color: #c8c8c8; font-size: 10px; }

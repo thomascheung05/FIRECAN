@@ -43,7 +43,15 @@ var MobileAtlas = L.tileLayer(
 var Neighbourhood = L.tileLayer(
   'https://tile.thunderforest.com/neighbourhood/{z}/{x}/{y}.png?apikey=17dc0c0df61f47d4b13d3520ec5b1557',
   { maxZoom: 19, attribution: '© OpenStreetMap contributors', name: "Neighbourhood" }
-); 
+);
+// Popular free base maps (no API key needed).
+const esriTile = service => `https://server.arcgisonline.com/ArcGIS/rest/services/${service}/MapServer/tile/{z}/{y}/{x}`;
+const EsriTopo = L.tileLayer(esriTile('World_Topo_Map'), { maxZoom: 19, attribution: 'Tiles © Esri' });
+const EsriStreets = L.tileLayer(esriTile('World_Street_Map'), { maxZoom: 19, attribution: 'Tiles © Esri' });
+const EsriNatGeo = L.tileLayer(esriTile('NatGeo_World_Map'), { maxZoom: 16, attribution: 'Tiles © Esri, National Geographic' });
+const EsriDarkGray = L.tileLayer(esriTile('Canvas/World_Dark_Gray_Base'), { maxZoom: 16, attribution: 'Tiles © Esri' });
+const EsriLightGray = L.tileLayer(esriTile('Canvas/World_Light_Gray_Base'), { maxZoom: 16, attribution: 'Tiles © Esri' });
+const OpenTopoMap = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17, attribution: '© OpenStreetMap contributors, SRTM · © OpenTopoMap (CC-BY-SA)' });
 
 
 
@@ -83,7 +91,9 @@ syncMapSize();
 startupTimer = setTimeout(finishMapStartup, 4000);
 L.control.zoom({ position: 'topright' }).addTo(map);
 L.control.layers({
-  'Satellite': Esrimap, 'OpenStreetMap': OpenStreetMap_Mapnik,
+  'Satellite': Esrimap, 'Esri topographic': EsriTopo, 'Esri streets': EsriStreets,
+  'National Geographic': EsriNatGeo, 'Esri dark gray': EsriDarkGray, 'Esri light gray': EsriLightGray,
+  'OpenTopoMap': OpenTopoMap, 'OpenStreetMap': OpenStreetMap_Mapnik,
   'Cycle': OpenCycleMap, 'Transport': Transport, 'Landscape': Landscape,
   'Outdoors': Outdoors, 'Spinal': SpinalMap, 'Transport dark': TransportDark,
   'Pioneer': Pioneer, 'Mobile atlas': MobileAtlas, 'Neighbourhood': Neighbourhood,
