@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#141414">
   <title>FIRECAN</title>
+  <link rel="icon" type="image/png" href="/static/img/fire.png">
   <link rel="stylesheet" href="/static/leaflet.css">
   <link rel="stylesheet" href="/static/firecan_style.css">
   <script defer src="/static/leaflet.js"></script>
@@ -16,7 +17,7 @@
   <div id="dataStatus" class="data-status" role="status" aria-live="polite" hidden><span id="dataStatusSpinner" class="spinner" aria-hidden="true"></span><span id="dataStatusText"></span><button id="dataStatusClose" type="button" class="icon-button" aria-label="Dismiss message" hidden>×</button></div>
   <div class="explorer">
     <header class="toolbar">
-      <a class="brand" href="/" aria-label="FIRECAN home"><span class="brand-mark" aria-hidden="true">🌲<span class="flame">🔥</span></span> FIRECAN</a>
+      <a class="brand" href="/" aria-label="FIRECAN home"><img class="brand-mark" src="/static/img/fire.png" alt="" aria-hidden="true"> FIRECAN</a>
       <nav aria-label="Explorer controls">
         <button id="filterToggle" type="button" aria-controls="filterPanel" aria-expanded="true">Filters</button>
         <button id="aboutButton" type="button">About</button>
@@ -83,21 +84,22 @@
   </div>
   <dialog id="aboutDialog" aria-labelledby="aboutTitle">
     <div class="dialog-heading"><h2 id="aboutTitle">A Record of Canada's Historic Forest Fires</h2><button type="button" class="icon-button" data-close aria-label="Close About">×</button></div>
-    <p>FIRECAN explores historical forest fire across Canada.<br>
+    <p>FIRECAN explores historical forest fires across Canada.<br>
       <strong>Filter</strong> by Province, Year, Size, Distance From A Location, Watershed, and Custom Polygons.<br>
-      <Strong>Increase Polygon Resolution</Strong> in Display Details <br>
-    <strong> Export your data for future use</strong></p>
-    <p>Use the <strong>Watershed Explorer</strong> to discover watersheds accross Canada and use them to filter <br>
-    Upload your own geojson files to display fires within an area <br>
-    To decrease wait times, default polgyon resolution is low. <Strong>Decrease the Polygon Tolerance</Strong> to get more accurate fire perimeters <br>
-  Exporting data uses current filter settings and has maximum resolution. </p>
-    <p>Data for FIRECAN comes from the the Canadian Wildland Fire information System (CWFIS), Données Québec and Esri Canada. Historical records vary in coverage and completeness. Consult the source datasets for their details.</p>
-    <h3>Data sources</h3>
+      <strong>Increase Polygon Resolution</strong> in Display Details.<br>
+      <strong>Export your data</strong> for future use.</p>
+    <p>Use the <strong>Watershed Explorer</strong> to discover watersheds across Canada and use them to filter.<br>
+      Upload your own GeoJSON files to display fires within an area.<br>
+      To decrease wait times, default polygon resolution is low. <strong>Decrease the Polygon Tolerance</strong> to get more accurate fire perimeters.<br>
+      Exporting data uses current filter settings and has maximum resolution.</p>
+    <h3>Data for FIRECAN comes from:</h3>
     <ul class="source-list">
       <li><a href="https://www.donneesquebec.ca/recherche/dataset/feux-de-foret" target="_blank" rel="noopener noreferrer">Données Québec · Quebec fires</a></li>
-      <li><a href="https://cwfis.cfs.nrcan.gc.ca/en/catalogue" target="_blank" rel="noopener noreferrer">CWFIS · Canadian fire records</a></li>
+      <li><a href="https://cwfis.cfs.nrcan.gc.ca/en/catalogue" target="_blank" rel="noopener noreferrer">Canadian Wildland Fire Information System · Canadian fire records</a></li>
       <li><a href="https://hub.arcgis.com/maps/12b6e33d5a754c92b97ae5d0fed6940a/about" target="_blank" rel="noopener noreferrer">Esri Canada · Canadian watersheds</a></li>
     </ul>
+    <p class="hint">Historical records vary in coverage and completeness. Consult the source datasets for their details.</p>
+    <h3>For Inquiries and Feedback: Thomascheung48@gmail.com</h3>
   </dialog>
   <dialog id="downloadDialog" aria-labelledby="downloadTitle">
     <div class="dialog-heading"><h2 id="downloadTitle">Export fires</h2><button type="button" class="icon-button" data-close aria-label="Close export">×</button></div>

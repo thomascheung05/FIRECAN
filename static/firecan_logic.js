@@ -64,7 +64,7 @@ function finishMapStartup() {
   });
 }
 Esrimap.on('load', finishMapStartup);
-const map = L.map('map', { center: [58, -96], zoom: 4, layers: [Esrimap], zoomControl: false });
+const map = L.map('map', { center: [59, -105], zoom: 4, layers: [Esrimap], zoomControl: false });
 // Recheck after layout and whenever the container changes, including browser
 // restoration and mobile viewport changes that do not fire a window resize.
 let mapSizeFrame;
