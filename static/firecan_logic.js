@@ -247,11 +247,11 @@ async function loadFilteredData(event) {
     // Build the replacement before removing existing results so failures preserve them.
     const fireLayer = buildFireLayer(data.fires);
     const layers = [fireLayer.layer];
-    if (data.user_buffer) layers.push(L.geoJSON(data.user_buffer, { style: { color: '#c4e8d5', weight: 2, fillOpacity: .08 } }));
+    if (data.user_buffer) layers.push(L.geoJSON(data.user_buffer, { style: { color: '#c4e8d5', weight: 2, fillOpacity: .08 }, interactive: false }));
     if (data.user_point) layers.push(L.geoJSON(data.user_point, {
       pointToLayer: (feature, latlng) => L.marker(latlng, { icon: L.divIcon({ className: 'point-marker', iconSize: [12, 12] }) }),
     }));
-    if (data.watershed_polygon) layers.push(L.geoJSON(data.watershed_polygon, { style: { color: '#a7bbeb', weight: 2, fillOpacity: .07 } }));
+    if (data.watershed_polygon) layers.push(L.geoJSON(data.watershed_polygon, { style: { color: '#a7bbeb', weight: 2, fillOpacity: .07 }, interactive: false }));
     const replacement = L.layerGroup(layers).addTo(map);
     if (resultsLayer) map.removeLayer(resultsLayer);
     resultsLayer = replacement;
