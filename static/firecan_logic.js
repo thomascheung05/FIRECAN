@@ -204,6 +204,38 @@ function popupDetails(properties) {
   }
   return content;
 }
+// Fire styling: bright outline so even tiny perimeters read as a glowing speck.
+const FIRE_STYLE = { color: '#ffa552', weight: 1, fillColor: '#7a1410', fillOpacity: .8 };
+// Fires whose on-screen footprint is smaller than this (px) also get a dot at their centre.
+const MIN_FIRE_PX = 6;
+const fireDotRenderer = L.canvas({ padding: .5 });
+let refreshFireDots = null;
+
+function buildFireLayer(fires) {
+  const polygons = L.geoJSON(fires, {
+    style: FIRE_STYLE,
+    onEachFeature: (feature, layer) => layer.bindPopup(popupDetails(feature.properties || {})),
+  });
+  const dots = L.layerGroup();
+  const entries = [];
+  polygons.eachLayer(layer => {
+    const bounds = typeof layer.getBounds === 'function' ? layer.getBounds() : null;
+    if (!bounds || !bounds.isValid()) return;
+    const dot = L.circleMarker(bounds.getCenter(), { ...FIRE_STYLE, renderer: fireDotRenderer, radius: 4, weight: 1.5, fillOpacity: .9 });
+    dot.bindPopup(popupDetails(layer.feature.properties || {}));
+    entries.push({ bounds, dot });
+  });
+  const refresh = () => {
+    for (const { bounds, dot } of entries) {
+      const ne = map.latLngToLayerPoint(bounds.getNorthEast());
+      const sw = map.latLngToLayerPoint(bounds.getSouthWest());
+      const tiny = Math.max(Math.abs(ne.x - sw.x), Math.abs(ne.y - sw.y)) < MIN_FIRE_PX;
+      if (tiny && !dots.hasLayer(dot)) dots.addLayer(dot);
+      else if (!tiny && dots.hasLayer(dot)) dots.removeLayer(dot);
+    }
+  };
+  return { layer: L.layerGroup([polygons, dots]), refresh };
+}
 async function loadFilteredData(event) {
   if (event) event.preventDefault();
   if (busy) return;
@@ -213,10 +245,8 @@ async function loadFilteredData(event) {
     const response = await postJSON('/fx_main', collectFilters());
     const data = await response.json();
     // Build the replacement before removing existing results so failures preserve them.
-    const layers = [L.geoJSON(data.fires, {
-      style: { color: '#ed8956', weight: 1.5, fillColor: '#d8542c', fillOpacity: .42 },
-      onEachFeature: (feature, layer) => layer.bindPopup(popupDetails(feature.properties || {})),
-    })];
+    const fireLayer = buildFireLayer(data.fires);
+    const layers = [fireLayer.layer];
     if (data.user_buffer) layers.push(L.geoJSON(data.user_buffer, { style: { color: '#c4e8d5', weight: 2, fillOpacity: .08 } }));
     if (data.user_point) layers.push(L.geoJSON(data.user_point, {
       pointToLayer: (feature, latlng) => L.marker(latlng, { icon: L.divIcon({ className: 'point-marker', iconSize: [12, 12] }) }),
@@ -225,6 +255,10 @@ async function loadFilteredData(event) {
     const replacement = L.layerGroup(layers).addTo(map);
     if (resultsLayer) map.removeLayer(resultsLayer);
     resultsLayer = replacement;
+    if (refreshFireDots) map.off('zoomend', refreshFireDots);
+    refreshFireDots = fireLayer.refresh;
+    map.on('zoomend', refreshFireDots);
+    refreshFireDots();
     if (boundaryLayer) boundaryLayer.bringToFront();
     const count = data.fires.features.length;
     $('foundMessage').textContent = `${count.toLocaleString()} ${count === 1 ? 'fire' : 'fires'} matched.`;
@@ -285,6 +319,8 @@ $('clearFilters').addEventListener('click', () => {
   $('errorMessage').hidden = true;
   if (resultsLayer) map.removeLayer(resultsLayer);
   resultsLayer = null;
+  if (refreshFireDots) map.off('zoomend', refreshFireDots);
+  refreshFireDots = null;
   $('foundMessage').textContent = 'Set filters to explore fires.';
 });
 $('provincecheckboxes').addEventListener('change', event => {
