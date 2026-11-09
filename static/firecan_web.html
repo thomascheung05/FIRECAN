@@ -49,11 +49,11 @@
           </fieldset>
           <fieldset>
             <legend>Year</legend>
-            <div class="field-pair"><label for="minYear">From<input id="minYear" type="number" min="0" step="1" placeholder="Any year"></label><label for="maxYear">To<input id="maxYear" type="number" min="0" step="1" placeholder="Any year"></label></div>
+            <div class="field-pair"><label for="minYear">From<input id="minYear" type="number" min="0" step="1" placeholder="1880"></label><label for="maxYear">To<input id="maxYear" type="number" min="0" step="1" placeholder="2026"></label></div>
           </fieldset>
           <fieldset>
-            <legend>Fire size <span class="unit">ha</span></legend>
-            <div class="field-pair"><label for="minSize">Minimum<input id="minSize" type="number" min="0" step="any" placeholder="No minimum"></label><label for="maxSize">Maximum<input id="maxSize" type="number" min="0" step="any" placeholder="No maximum"></label></div>
+            <legend>Fire Size <span class="unit">(ha)</span></legend>
+            <div class="field-pair"><label for="minSize">Minimum<input id="minSize" type="number" min="0" step="any" placeholder="0"></label><label for="maxSize">Maximum<input id="maxSize" type="number" min="0" step="any" placeholder="10000000"></label></div>
           </fieldset>
           <fieldset>
             <legend>Near a location</legend>
@@ -61,12 +61,12 @@
             <div class="location-row"><label for="distanceRadius">Radius <span class="unit">km</span><input id="distanceRadius" type="number" min="0.001" step="any" placeholder="e.g. 25"></label><p id="locationHelp" class="hint">Click the map to see coordinates.</p></div>
           </fieldset>
           <fieldset>
-            <legend>Quebec watershed</legend>
+            <legend>Watershed</legend>
             <label for="watershedName">Watershed name<input id="watershedName" type="text" placeholder="e.g. YAMASKA"></label>
             <button id="watershedExplorerButton" type="button" class="secondary wide">Browse watersheds</button>
           </fieldset>
           <fieldset>
-            <legend>Your boundary <span class="boundary-dot" aria-hidden="true"></span></legend>
+            <legend>Custom Polygon</legend>
             <label for="polygonFile" class="upload-label">Upload GeoJSON</label>
             <input id="polygonFile" type="file" accept=".geojson,.json,application/geo+json,application/json" aria-describedby="polygonHelp polygonStatus">
             <p id="polygonHelp" class="hint">Polygon or MultiPolygon · up to 10 MB<br>Includes fires that overlap or touch the boundary.</p>

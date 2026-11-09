@@ -63,7 +63,6 @@ button:disabled, input:disabled { opacity: .55; cursor: wait; }
 .location-row { display: grid; grid-template-columns: 100px 1fr; gap: 14px; margin-top: 10px; align-items: end; }
 .hint { font-size: 11px; line-height: 1.6; color: var(--muted); margin: 9px 0 0; }
 .location-row .hint { margin-bottom: 5px; }
-.boundary-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #72d5d9; margin-left: 5px; vertical-align: 2px; }
 .boundary-summary { display: flex; align-items: baseline; gap: 10px; justify-content: space-between; }
 #polygonStatus { overflow-wrap: anywhere; }
 .display-options { padding: 2px 0 14px; }
