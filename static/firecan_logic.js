@@ -181,6 +181,14 @@ function collectFilters() {
   if (polygonDocument !== null) filters.polygon_geojson = polygonDocument;
   return filters;
 }
+// True when the user has narrowed the search in some way. "All provinces" and the
+// display tolerance don't count as filters.
+function hasActiveFilter(filters) {
+  const provinceFilter = filters.provinces.some(value => value !== 'ALL');
+  const textFilter = ['min_year', 'max_year', 'min_size', 'max_size', 'distance_coords', 'distance_radius', 'watershed_name']
+    .some(key => filters[key] !== '');
+  return provinceFilter || textFilter || 'polygon_geojson' in filters;
+}
 async function postJSON(url, body) {
   const response = await fetch(url, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
@@ -240,9 +248,14 @@ async function loadFilteredData(event) {
   if (event) event.preventDefault();
   if (busy) return;
   $('errorMessage').hidden = true;
+  const filters = collectFilters();
+  if (!hasActiveFilter(filters)) {
+    showError('Please select at least one filter.');
+    return;
+  }
   setBusy(true);
   try {
-    const response = await postJSON('/fx_main', collectFilters());
+    const response = await postJSON('/fx_main', filters);
     const data = await response.json();
     // Build the replacement before removing existing results so failures preserve them.
     const fireLayer = buildFireLayer(data.fires);

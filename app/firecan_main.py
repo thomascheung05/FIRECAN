@@ -1,4 +1,4 @@
-MAX_SIZE_MB = 100
+MAX_SIZE_MB = 200
 LOCAL_PORT = 5050
 DOWNLOAD_FROM_GIT = True       # True: try the prebuilt data on Git first (falls back to the source if that fails). False: always download and process from the source
 
