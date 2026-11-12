@@ -96,6 +96,17 @@ a { color: #ff6b6b; }
 #aboutDialog h3 { font-size: clamp(15px, 1.2vw, 24px); margin: 1.2em 0 .4em; }
 #aboutDialog .source-list { font-size: clamp(13px, 1vw, 20px); margin: 0; line-height: 1.8; }
 #aboutDialog p.hint { font-size: clamp(12px, .85vw, 17px); font-style: italic; margin: 1.2em 0 0; }
+/* Screenshot gallery: contain:inline-size keeps it from widening the dialog, and the dialog's
+   height is locked on open (firecan_logic.js) so the screenshots scroll instead of growing it. */
+#aboutDialog { overflow-y: auto; }
+.screenshot-gallery { contain: inline-size; margin-top: 1.4em; }
+.shot { margin: 0 0 1.2em; }
+.shot img { display: block; width: 100%; height: auto; border: 1px solid #5a2a2a; border-radius: 8px; }
+.shot figcaption { font-size: clamp(12px, .85vw, 17px); color: #aaa; margin-top: .4em; }
+.shot.missing img { display: none; }
+.shot-row { display: flex; gap: .8em; align-items: flex-start; }
+.shot-row img { flex: 1 1 0; min-width: 0; }
+.shot.missing::before { content: "Screenshot placeholder"; display: grid; place-items: center; aspect-ratio: 16 / 9; border: 2px dashed #5a2a2a; border-radius: 8px; color: #777; font-size: clamp(13px, 1vw, 20px); }
 .watershed-dialog { width: min(920px, calc(100vw - 32px)); }
 #watershedMap { height: min(65vh, 580px); border-radius: 7px; margin-top: 12px; background: #1f1f1f; }
 .leaflet-control-layers, .leaflet-bar a { background: #141414ed; color: #e8e8e8; border-color: #ffffff1a; }

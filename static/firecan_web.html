@@ -87,7 +87,7 @@
       <p>FIRECAN explores historical forest fires across Canada.</p>
 
       <p>Canadian forest fire data is scattered across many separate sources, which makes it hard to work with. FIRECAN brings this data together in one place and makes it easier to explore and visualize, whether you're a researcher, a student, or simply curious about fire history where you live.</p>
-      <strong>Filter</strong> by Province, Year, Size, Distance From A Location, Watershed, and Custom Polygons.<br>
+      <p><strong>Filter</strong> by Province, Year, Size, Distance From A Location, Watershed, and Custom Polygons.<br>
       <strong>Increase Polygon Resolution</strong> in Display Details.<br>
       <strong>Export your data</strong> for future use.</p>
     <p>Use the <strong>Watershed Explorer</strong> to discover watersheds across Canada and use them to filter.<br>
@@ -103,6 +103,20 @@
     <p class="hint">Historical records vary in coverage and completeness. Consult the source datasets for their details.</p>
     <h3>To run FIRECAN locally: <a href="https://github.com/thomascheung05/FIRECAN" target="_blank" rel="noopener noreferrer">FIRECAN Github</a></h3>
     <h3>For Inquiries and Feedback: Thomascheung48@gmail.com</h3>
+    <div id="aboutScreenshots" class="screenshot-gallery">
+      <h3>Examples</h3>
+      <figure class="shot"><img src="/static/img/screenshots/screenshot1.png" alt="FIRECAN screenshot 1" loading="lazy" onerror="this.parentElement.classList.add('missing')"><figcaption>Filtering by province, year and fire size</figcaption></figure>
+      <figure class="shot shot-pair">
+        <div class="shot-row">
+          <img src="/static/img/screenshots/screenshot2.png" alt="FIRECAN screenshot 2" loading="lazy" onerror="this.style.display='none'">
+          <img src="/static/img/screenshots/screenshot3.png" alt="FIRECAN screenshot 3" loading="lazy" onerror="this.style.display='none'">
+        </div>
+        <figcaption>A polygon's detail when tolerance = 0 vs toloreance = 1</figcaption>
+      </figure>
+      <figure class="shot"><img src="/static/img/screenshots/screenshot4.png" alt="FIRECAN screenshot 4" loading="lazy" onerror="this.parentElement.classList.add('missing')"><figcaption>Filtering by radius around a location</figcaption></figure>
+      <figure class="shot"><img src="/static/img/screenshots/screenshot5.png" alt="FIRECAN screenshot 5" loading="lazy" onerror="this.parentElement.classList.add('missing')"><figcaption>Filtering by watershed</figcaption></figure>
+      <figure class="shot"><img src="/static/img/screenshots/screenshot6.png" alt="FIRECAN screenshot 6" loading="lazy" onerror="this.parentElement.classList.add('missing')"><figcaption>Filtering by custom geojson</figcaption></figure>
+    </div>
   </dialog>
   <dialog id="downloadDialog" aria-labelledby="downloadTitle">
     <div class="dialog-heading"><h2 id="downloadTitle">Export fires</h2><button type="button" class="icon-button" data-close aria-label="Close export">×</button></div>

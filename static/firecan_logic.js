@@ -72,7 +72,7 @@ function finishMapStartup() {
   });
 }
 Esrimap.on('load', finishMapStartup);
-const map = L.map('map', { center: [59, -105], zoom: 4, layers: [Esrimap], zoomControl: false });
+const map = L.map('map', { center: [59, -105], zoom: 4, layers: [Esrimap], zoomControl: false, zoomSnap: 0.25, zoomDelta: 0.5, wheelPxPerZoomLevel: 120 });
 // Recheck after layout and whenever the container changes, including browser
 // restoration and mobile viewport changes that do not fire a window resize.
 let mapSizeFrame;
@@ -124,7 +124,16 @@ for (const dialog of document.querySelectorAll('dialog')) {
     if (event.target === dialog && (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom)) dialog.close();
   });
 }
-$('aboutButton').addEventListener('click', () => $('aboutDialog').showModal());
+$('aboutButton').addEventListener('click', () => {
+  // Size the box to the text plus the "Examples" heading, then reveal the screenshots so they scroll within that size.
+  const dialog = $('aboutDialog'), shots = dialog.querySelectorAll('#aboutScreenshots .shot');
+  dialog.style.height = '';
+  shots.forEach(s => { s.hidden = true; });
+  dialog.showModal();
+  dialog.style.height = `${dialog.offsetHeight}px`;
+  shots.forEach(s => { s.hidden = false; });
+  dialog.scrollTop = 0;
+});
 $('saveButton').addEventListener('click', () => {
   if (busy) return;
   $('downloadStatus').textContent = '';
